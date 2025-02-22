@@ -3,6 +3,7 @@ log
 .venv
 .mypy_cache
 .pytest_cache
+__pycache__
 settings.yaml
 settings.yaml.new
 settings.yaml.safe

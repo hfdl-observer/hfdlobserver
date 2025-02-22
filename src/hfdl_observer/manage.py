@@ -285,11 +285,12 @@ class UniformConductor(AbstractConductor):
                     available.remove(receiver)
                     break
             else:
+                nl = '\n'
                 logger.warning(f'cannot allocate a receiver for {channel}')
-                logger.info(f'channels\n{"\n".join(repr(c) for c in channels)}')
-                logger.info(f'available left\n{"\n".join(str(a) for a in available)}')
-                logger.info(f'keeps\n{"\n".join(str(a) for a in keeps.values())}')
-                logger.info(f'starts\n{"\n".join(str(s) for s in starts)}')
+                logger.info(f'channels\n{nl.join(repr(c) for c in channels)}')
+                logger.info(f'available left\n{nl.join(str(a) for a in available)}')
+                logger.info(f'keeps\n{nl.join(str(a) for a in keeps.values())}')
+                logger.info(f'starts\n{nl.join(str(s) for s in starts)}')
 
     def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
         if not self.proxies:
