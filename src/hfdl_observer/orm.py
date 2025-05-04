@@ -237,7 +237,7 @@ class NetworkUpdater(network.AbstractNetworkUpdater):
         try:
             super().on_hfdl(packet_info)
         except Exception as err:
-            logger.error('HFDL processing', exc_info=err)
+            logger.error('HFDL packet processing', exc_info=err)
 
     # wrap in a session for database access on delegated functions.
     @pony.orm.db_session(strict=True, retry=3)
@@ -245,7 +245,7 @@ class NetworkUpdater(network.AbstractNetworkUpdater):
         try:
             super().on_community(airframes)
         except Exception as err:
-            logger.error('community processing', exc_info=err)
+            logger.error('community update processing', exc_info=err)
 
     # wrap in a session for database access on delegated functions.
     @pony.orm.db_session(strict=True, retry=3)

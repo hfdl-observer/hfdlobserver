@@ -84,7 +84,6 @@ class ZeroSubscriber:
         self.running = True
         self.socket = self.context.socket(zmq.SUB)
         self.socket.connect(self.url)
-        # logger.info(f'{self} subscribing to "{self.channel}"')
         self.socket.setsockopt(zmq.SUBSCRIBE, self.channel.encode())
 
         try:
@@ -172,7 +171,6 @@ class ZeroPublisher:
         encoded_channel = channel.encode()
         encoded_payload = payload.encode()
         if self.socket is None:
-            # logger.info('publisher not connected')
             try:
                 self.start()
             except OSError as err:

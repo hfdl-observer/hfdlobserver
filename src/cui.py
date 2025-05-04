@@ -165,6 +165,8 @@ class ObserverDisplay:
         keyboard.add_mapping('Q', exit)
         keyboard.add_mapping('h', lambda _: logger.info(self.keyboard_help()))
         keyboard.add_mapping('H', lambda _: logger.info(self.keyboard_help()))
+        keyboard.add_mapping('w', self.toggle_flexible_width)
+        keyboard.add_mapping('W', self.toggle_flexible_width)
         for k, m in enumerate(self.heatmap.all_modes.keys()):
             keyboard.add_mapping(str(k+1), functools.partial(self.heatmap.select_display_mode, m))
         return keyboard
@@ -249,7 +251,7 @@ class ObserverDisplay:
             text.append('|')
             text.append(f'G{forecast1d["G"]["Scale"] or "-"}', FORECAST_STYLEMAP[forecast1d["G"]["Text"]]),
         except Exception as err:
-            logger.warning('ignoring forecaster error', exc_info=err)
+            logger.debug('ignoring forecaster error', exc_info=err)
 
     @property
     def current_width(self) -> int:
@@ -297,6 +299,9 @@ class ObserverDisplay:
     def smaller_bins(self, *_: Any) -> None:
         bin_size = self.heatmap.bin_size
         self.heatmap.set_bin_size(bin_size - 60)
+
+    def toggle_flexible_width(self, *_: Any) -> None:
+        self.heatmap.toggle_flexible_width()
 
 
 class CumulativeLine:
@@ -672,6 +677,7 @@ class HeatMap:
     current_mode: str
     deferred_render_task: None | asyncio.Handle | asyncio.Task = None
     renderer_available: asyncio.Event
+    flexible_width: bool = False
 
     def __init__(self, config: dict) -> None:
         self.config = config
@@ -685,6 +691,7 @@ class HeatMap:
         }
         self.select_display_mode(mode)
         self.set_bin_size(config.get('bin_size', 60))
+        self.set_flexible_width(util.tobool(self.config.get('flexible_width', False)))
         self.refresh_period = max(1, min(self.refresh_period, self.bin_size))
         self.targetted_frequencies = []
         self.untargetted_frequencies = []
@@ -695,6 +702,10 @@ class HeatMap:
         self.bin_size = min(3600, max(60, int(bin_size)))
         self.maybe_render()
 
+    def set_flexible_width(self, flexible_width: bool) -> None:
+        self.flexible_width = flexible_width
+        self.maybe_render()
+
     def select_display_mode(self, mode: str, *_: Any) -> None:
         self.current_mode = mode
         try:
@@ -703,11 +714,14 @@ class HeatMap:
             raise ValueError(f'display mode not supported: {mode}') from None
         self.maybe_render()
 
+    def toggle_flexible_width(self) -> None:
+        self.set_flexible_width(not self.flexible_width)
+
     async def by_frequency(self, num_bins: int) -> AbstractHeatMapFormatter:
         source = HeatMapByFrequencyFormatter(
             self.bin_size,
             num_bins,
-            util.tobool(self.config.get('flexible_width', False)),
+            self.flexible_width,
             self.targetted_frequencies,
             self.untargetted_frequencies,
             util.tobool(self.config.get('show_all_active', False)),
@@ -723,31 +737,25 @@ class HeatMap:
         source = HeatMapByBandFormatter(
             self.bin_size,
             num_bins,
-            util.tobool(self.config.get('flexible_width', True)),
+            self.flexible_width,
             util.tobool(self.config.get('show_all_bands', True))
         )
         await source.fetch()
         return source
 
     async def by_station(self, num_bins: int) -> AbstractHeatMapFormatter:
-        source = HeatMapByStationFormatter(
-            self.bin_size, num_bins, util.tobool(self.config.get('flexible_width', True))
-        )
+        source = HeatMapByStationFormatter(self.bin_size, num_bins, self.flexible_width)
         await source.fetch()
         return source
 
     async def by_agent(self, num_bins: int) -> AbstractHeatMapFormatter:
-        source = HeatMapByAgentFormatter(
-            self.bin_size, num_bins, util.tobool(self.config.get('flexible_width', True))
-        )
+        source = HeatMapByAgentFormatter(self.bin_size, num_bins, self.flexible_width)
         await source.fetch()
         return source
 
     async def by_receiver(self, num_bins: int) -> AbstractHeatMapFormatter:
         source = HeatMapByReceiverFormatter(
-            self.bin_size, num_bins,
-            util.tobool(self.config.get('flexible_width', True)),
-            list(self.observer.proxies.values())
+            self.bin_size, num_bins, self.flexible_width, list(self.observer.proxies.values())
         )
         await source.fetch()
         return source
@@ -900,7 +908,7 @@ class HeatMap:
                 await self.render()  # maybe_render might be better if performance is impacted.
                 await asyncio.sleep(self.refresh_period)
         except Exception as exc:
-            logger.error('oops', exc_info=exc)
+            logger.error('error while rendering UI', exc_info=exc)
             raise
 
     def stop(self) -> None:

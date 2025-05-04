@@ -120,7 +120,7 @@ class NetworkOverview(bus.EventNotifier):
                 'ground_stations': out
             }
             if payload != self.last_state:
-                logger.info('saving station data')
+                logger.debug('saving station data')
                 self.last_state = payload.copy()
                 payload['when'] = when
                 self.save_path.write_text(json.dumps(payload, indent=4) + '\n')
@@ -223,6 +223,7 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
     ranked_station_ids: list[int]
     ignored_frequencies: list[tuple[int, int]]
     proxies: list[ReceiverProxy]
+    last_listening_logged: None | tuple[int, int, int] = None
 
     def __init__(self, config: dict) -> None:
         super().__init__()
@@ -254,6 +255,12 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
         for receiver in self.proxies:
             if receiver.channel and receiver.channel.frequencies == frequencies:
                 receiver.die()
+
+    def log_listening(self, targetted_count: int, active_count: int, extra: int) -> None:
+        t = (targetted_count, active_count, extra)
+        if self.last_listening_logged != t:
+            logger.info(f'Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).')
+            self.last_listening_logged = t
 
 
 class UniformOrchestrator(AbstractOrchestrator):
@@ -308,32 +315,44 @@ class UniformOrchestrator(AbstractOrchestrator):
         possible_frequencies = list(itertools.chain(*[c.frequencies for c in channels]))
         active_count = len([f for f in possible_frequencies if network.STATIONS.is_active(f)])
         extra = untargetted_count
-        logger.info(f'Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).')
+        self.log_listening(targetted_count, active_count, extra)
         return chosen_channels
 
     def proxy_sort_key(self, proxy: ReceiverProxy) -> tuple[int, int]:
         return (proxy.weight, max(proxy.observable_widths()))
 
-    def assign_channels(self, channels: list[data.ObservingChannel]) -> None:
+    def assign_channels(self, channels: list[data.ObservingChannel], clean_slate: bool = False) -> None:
+        assignments = self.compute_assignments(channels, clean_slate=False)
+        for receiver, frequencies in assignments:
+            receiver.listen(frequencies)
+
+    def compute_assignments(
+        self, channels: list[data.ObservingChannel], clean_slate: bool = False
+    ) -> list[tuple[ReceiverProxy, list[int]]]:
         keeps = {}
         starts: list[data.ObservingChannel] = []
         ordered_proxies = sorted(self.proxies, key=self.proxy_sort_key, reverse=True)
         logger.debug(f'Receivers: {list(p.name for p in ordered_proxies)}')
         available = ordered_proxies.copy()
-        for channel in channels:
-            if not channel.frequencies:
-                continue
-            for receiver in ordered_proxies:
-                if receiver.covers(channel):
-                    logger.debug(f'keeping {receiver}')
-                    keeps[receiver.name] = channel
-                    if receiver in available:
-                        available.remove(receiver)
-                    break
-            else:
-                logger.debug(f'adding {channel} to starts')
-                starts.append(channel)
+        if clean_slate:
+            starts = channels
+        else:
+            for channel in channels:
+                if not channel.frequencies:
+                    continue
+                for receiver in ordered_proxies:
+                    if receiver.covers(channel):
+                        logger.debug(f'keeping {receiver}')
+                        keeps[receiver.name] = channel
+                        if receiver in available:
+                            available.remove(receiver)
+                        break
+                else:
+                    logger.debug(f'adding {channel} to starts')
+                    starts.append(channel)
 
+        assignments: list[tuple[ReceiverProxy, list[int]]] = []
+        unassigned: list[data.ObservingChannel] = []
         for channel in starts:
             for receiver in available:
                 if max(receiver.observable_widths()) >= channel.width_hz:
@@ -342,23 +361,35 @@ class UniformOrchestrator(AbstractOrchestrator):
                         receiver_freqs = receiver.channel.frequencies
                     else:
                         receiver_freqs = []
-                    receiver.listen(channel.frequencies)
-                    logger.debug(f'assigned {channel.frequencies} to {receiver.name} (was {receiver_freqs})')
+                    assignments.append((receiver, channel.frequencies))
+                    logger.debug(f'assigning {channel.frequencies} to {receiver.name} (was {receiver_freqs})')
                     self.reaper.add_channel(channel)
                     available.remove(receiver)
                     break
             else:
-                logger.warning(f'cannot allocate a receiver for {channel}')
-                logger.info(f'channels\n{EOL.join(repr(c) for c in channels)}')
-                logger.info(f'available left\n{EOL.join(str(a) for a in available)}')
-                logger.info(f'keeps\n{EOL.join(str(a) for a in keeps.values())}')
-                logger.info(f'starts\n{EOL.join(str(s) for s in starts)}')
-                self.maybe_describe_receivers(force=True)
+                if not clean_slate:
+                    # there are cases where an assignment is not possible because an earlier receiver needs to be
+                    # reassigned, but it's listening to a valid channel. Thus it won't be "freed", and the intended
+                    # new channel cannot be assigned. In this case, we rerun the assignments, but don't try to keep
+                    # old assignments. This is fairly inefficient, but it should be fairly rare.
+                    logger.info('orchestration requires clean slate processing')
+                    return self.compute_assignments(channels, clean_slate=True)
+                unassigned.append(channel)
+        if unassigned:
+            logger.warning(f'cannot allocate receivers for {unassigned}')
+            logger.info(f'channels\n{EOL.join(repr(c) for c in channels)}')
+            logger.info(f'available left\n{EOL.join(str(a) for a in available)}')
+            logger.info(f'keeps\n{EOL.join(str(a) for a in keeps.values())}')
+            logger.info(f'starts\n{EOL.join(str(s) for s in starts)}')
+            logger.info(f'proxies\n{EOL.join(str(s) for s in ordered_proxies)}')
+            # self.maybe_describe_receivers(force=True)
 
         for receiver in available:
             # idle receivers!
             logger.info(f'receiver {receiver} becomes idle.')
-            receiver.listen([])
+            assignments.append((receiver, []))
+
+        return assignments
 
     def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
         self.validate_proxies()
@@ -421,8 +452,7 @@ class DiverseOrchestrator(UniformOrchestrator):
         assigned = set(itertools.chain.from_iterable(network.STATIONS.assigned().values()))
         active_count = len([f for f in assigned if network.STATIONS.is_active(f)])
         extra = untargetted_count
-        logger.info(f'Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).')
-
+        self.log_listening(targetted_count, active_count, extra)
         return actual_channels
 
 
@@ -560,9 +590,9 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
         return outstanding
 
     async def stop(self) -> None:
-        logger.warning(f'{self} stopped')
+        logger.debug(f'{self} stopped')
         await asyncio.gather(*self.outstanding_awaitables(), return_exceptions=True)
-        logger.info(f'{self} tasks halted')
+        logger.debug(f'{self} tasks halted')
 
     def heartbeat(self) -> None:
         horizon = util.now() - datetime.timedelta(seconds=100)

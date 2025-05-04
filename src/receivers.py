@@ -336,7 +336,7 @@ class Web888ExecReceiver(Web888Receiver):
                 logger.error(f'{self} encountered an error', exc_info=err)
 
     async def stop(self) -> None:
-        if self.decoder or self.client:
+        if (self.decoder or self.client) and self.frequencies:
             self.logger.info(f'Stopping {self}')
         client = self.client
         decoder = self.decoder
@@ -413,14 +413,14 @@ class DirectReceiver(LocalReceiver):
             if not isinstance(self.decoder, decoders.DirectDecoder):
                 raise ValueError(f'{self.decoder} is not an expected Decoder')
             self.observable_channel_widths = self.decoder.observable_channel_widths()
-            logger.info(f'{self.name} observable channel widths {self.observable_channel_widths}')
+            logger.debug(f'{self.name} observable channel widths {self.observable_channel_widths}')
 
     def is_running(self) -> bool:
         return self.decoder is not None and self.decoder.is_running()
 
     async def run(self) -> AsyncGenerator:
         if self.decoder is None:
-            logger.warning(f'{self} has no decoder')
+            logger.info(f'{self} has no decoder')
             return
         self.publish_listening()
         await asyncio.sleep(random.randrange(1, 20) / 10.0)   # thundering herd dispersal
@@ -444,10 +444,10 @@ class DirectReceiver(LocalReceiver):
 
     def clear(self) -> None:
         if (self.decoder is None or not self.decoder.is_running()):
-            logger.info(f'{self.name} has no running process {self.decoder}, clearing.')
+            logger.debug(f'{self.name} has no running process {self.decoder}, clearing.')
             super().clear()
         else:
-            logger.info(f'{self.name} still has running a process, not clearing')
+            logger.debug(f'{self.name} still has running a process, not clearing')
 
     def describe_components(self) -> list[str]:
         if self.decoder:
