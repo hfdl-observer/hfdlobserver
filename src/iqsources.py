@@ -15,7 +15,6 @@ from typing import AsyncGenerator, Optional
 
 import hfdl_observer.data
 import hfdl_observer.env as env
-import hfdl_observer.hfdl as hfdl
 import hfdl_observer.process as process
 import hfdl_observer.util as util
 

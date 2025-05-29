@@ -26,9 +26,9 @@ from typing import Any, AsyncGenerator, Callable, Coroutine, IO, Union
 
 logger = logging.getLogger(__name__)
 thread_local = threading.local()
-thread_local.shutdown_event = asyncio.Event()
 thread_local.loop = None
 MESSAGING_NODE_ID = uuid.uuid4().int
+shutdown_event = asyncio.Event()
 
 
 def tobool(val: Union[bool, str, int]) -> bool:
@@ -272,7 +272,7 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
                 break
             if ord(key) in (3, 4):  # ^C, ^D
                 logger.warning('break received')
-                thread_local.shutdown_event.set()
+                shutdown_event.set()
                 break
             if pacing > 0:
                 when = now()
@@ -364,7 +364,7 @@ async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
 
 
 def is_shutting_down() -> bool:
-    shutting_down: bool = thread_local.shutdown_event.is_set()
+    shutting_down: bool = shutdown_event.is_set()
     return shutting_down
 
 

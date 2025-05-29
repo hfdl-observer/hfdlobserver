@@ -106,12 +106,17 @@ class ChannelObserver:
     def observable_widths(self) -> list[int]:
         raise NotImplementedError(str(self.__class__))
 
-    def width_for(self, frequencies: list[int]) -> int:
+    @classmethod
+    def required_width(cls, frequencies: list[int]) -> int:
         if not frequencies:
             return 0
         max_hz = max(frequencies) * 1000
         min_hz = min(frequencies) * 1000
         needed = max(hfdl.HFDL_CHANNEL_WIDTH, max_hz - min_hz)
+        return needed
+
+    def width_for(self, frequencies: list[int]) -> int:
+        needed = self.required_width(frequencies)
         widths = sorted(self.observable_widths(), reverse=True)
         for available_width in widths:
             if needed <= available_width:

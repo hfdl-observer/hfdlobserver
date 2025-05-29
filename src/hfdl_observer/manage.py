@@ -262,6 +262,38 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
             logger.info(f'Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).')
             self.last_listening_logged = t
 
+    def validate_proxies(self) -> None:
+        for proxy in self.proxies[:]:
+            if not proxy.recently_alive():
+                logger.warning(f'proxy {proxy.name}:{proxy} is dead. Removing.')
+                self.remove_receiver(proxy)
+
+
+class StaticOrchestrator(AbstractOrchestrator):
+    def __init__(self, config: dict) -> None:
+        super().__init__(config)
+        self.allocations = {}
+        for name, elements in config.get('static_allocations', {}).items():
+            self.allocations[name] = [int(e) for e in elements]
+
+    def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
+        self.validate_proxies()
+        if not self.proxies:
+            return []
+
+        actual_channels = []
+        for name, frequencies in self.allocations.items():
+            try:
+                proxy = self.proxies[name]
+            except KeyError:
+                logger.info(f'no proxy for {name}')
+                continue
+            if not proxy.channel.matches(frequencies):
+                proxy.listen(data.ObservingChannel(data.ChannelObserver.required_width(frequencies), frequencies))
+            if proxy.channel is not None:
+                actual_channels.append(proxy.channel)
+        return actual_channels
+
 
 class UniformOrchestrator(AbstractOrchestrator):
     def observable_widths(self) -> list[int]:
@@ -324,7 +356,8 @@ class UniformOrchestrator(AbstractOrchestrator):
     def assign_channels(self, channels: list[data.ObservingChannel], clean_slate: bool = False) -> None:
         assignments = self.compute_assignments(channels, clean_slate=False)
         for receiver, frequencies in assignments:
-            receiver.listen(frequencies)
+            if receiver.channel is None or set(frequencies) != set(receiver.channel.frequencies):
+                receiver.listen(frequencies)
 
     def compute_assignments(
         self, channels: list[data.ObservingChannel], clean_slate: bool = False
@@ -386,7 +419,7 @@ class UniformOrchestrator(AbstractOrchestrator):
 
         for receiver in available:
             # idle receivers!
-            logger.info(f'receiver {receiver} becomes idle.')
+            logger.info(f'receiver {receiver} is idle.')
             assignments.append((receiver, []))
 
         return assignments
@@ -401,12 +434,6 @@ class UniformOrchestrator(AbstractOrchestrator):
         actual_channels = self.merge_channels(channels)
         self.assign_channels(actual_channels)
         return actual_channels
-
-    def validate_proxies(self) -> None:
-        for proxy in self.proxies[:]:
-            if not proxy.recently_alive():
-                logger.warning(f'proxy {proxy.name}:{proxy} is dead. Removing.')
-                self.remove_receiver(proxy)
 
     def maybe_describe_receivers(self, *_: Any, force: bool = False) -> None:
         raise NotImplementedError(self.__class__.__name__)

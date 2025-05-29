@@ -964,10 +964,10 @@ class RichLive(rich.live.Live):
 
 def exit(*_: Any) -> None:
     logger.info('exit requested')
-    util.thread_local.shutdown_event.set()
+    util.shutdown_event.set()
 
 
-def screen(loghandler: Optional[logging.Handler], debug: bool = True) -> None:
+def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
     cui_settings = settings.cui
     console = rich.console.Console()
     console.clear()
@@ -993,7 +993,7 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True) -> None:
     if loghandler:
         handlers.append(loghandler)
     logging.basicConfig(
-        level=logging.DEBUG if debug else logging.INFO,
+        level=logging.WARNING if quiet else (logging.DEBUG if debug else logging.INFO),
         format=FORMAT,
         datefmt="[%X]",
         handlers=handlers,

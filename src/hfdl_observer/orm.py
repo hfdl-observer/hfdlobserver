@@ -81,6 +81,9 @@ class Untracked:
         return {k: getattr(v, 'get_untracked', lambda: v)() for k, v in self.to_dict().items()}
 
 
+gather_prune_stats = False
+
+
 class StationAvailability(DbEntity, Untracked):
     station_id = pony.orm.Required(int)
     stratum = pony.orm.Required(int)
@@ -109,15 +112,17 @@ class StationAvailability(DbEntity, Untracked):
     @classmethod
     @pony.orm.db_session(strict=True, retry=3)
     def _prune_before(cls) -> None:
-        before_prune = pony.orm.count(a for a in iter(StationAvailability))
+        if gather_prune_stats:
+            before_prune = pony.orm.count(a for a in iter(StationAvailability))
         horizon = util.pseudoframe(util.now() - datetime.timedelta(days=1))
         pony.orm.delete(a for a in iter(StationAvailability) if a.valid_to_frame is not None and a.valid_to_frame < horizon)
         pony.orm.delete(a for a in iter(StationAvailability) if a.valid_to_frame is None and a.valid_at_frame < horizon)
-        pages = int(db.execute("PRAGMA page_count;").fetchone()[0])
-        # logger.debug(f'DB size is {pages * pagesize()}')
-        after_prune = pony.orm.count(a for a in iter(StationAvailability))
-        if after_prune < before_prune:
-            logger.info(f'pruned {before_prune - after_prune} StationAvailability ({after_prune} records, {pages} pages)')
+        if gather_prune_stats:
+            pages = int(db.execute("PRAGMA page_count;").fetchone()[0])
+            # logger.debug(f'DB size is {pages * pagesize()}')
+            after_prune = pony.orm.count(a for a in iter(StationAvailability))
+            if after_prune < before_prune:
+                logger.info(f'pruned {before_prune - after_prune} StationAvailability ({after_prune} records, {pages} pages)')
 
     @classmethod
     async def add(cls, base: network.StationAvailability) -> bool:
@@ -183,15 +188,17 @@ class ReceivedPacket(DbEntity, Untracked):
     @pony.orm.db_session(strict=True, retry=3)
     def _prune_before(cls, before: datetime.datetime) -> None:
         try:
-            before_prune = pony.orm.count(r for r in iter(ReceivedPacket))
+            if gather_prune_stats:
+                before_prune = pony.orm.count(r for r in iter(ReceivedPacket))
             horizon = to_timestamp(before)
             # initial = int(db.execute("PRAGMA page_count;").fetchone()[0])
             pony.orm.delete(p for p in iter(ReceivedPacket) if p.when < horizon)
-            after = int(db.execute("PRAGMA page_count;").fetchone()[0])
-            # logger.debug(f'DB size was {initial * pagesize()}, now {after * pagesize()}')
-            after_prune = pony.orm.count(r for r in iter(ReceivedPacket))
-            if after_prune < before_prune:
-                logger.info(f'pruned {before_prune - after_prune} ReceivedPackets ({after_prune} records, {after} pages)')
+            if gather_prune_stats:
+                after = int(db.execute("PRAGMA page_count;").fetchone()[0])
+                # logger.debug(f'DB size was {initial * pagesize()}, now {after * pagesize()}')
+                after_prune = pony.orm.count(r for r in iter(ReceivedPacket))
+                if after_prune < before_prune:
+                    logger.info(f'pruned {before_prune - after_prune} ReceivedPackets ({after_prune} records, {after} pages)')
         except Exception as err:
             logger.error('cannot prune', exc_info=err)
 

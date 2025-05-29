@@ -7,6 +7,8 @@
 import asyncio
 import json
 import logging
+import multiprocessing
+import multiprocessing.synchronize
 import threading
 
 from typing import Any, Optional
@@ -30,16 +32,34 @@ def get_thread_context() -> Context:
 Message = util.Message
 
 
-class ZeroBroker:
-    # feeling cute, might delete later.
-    thread: Optional[threading.Thread] = None
-    initialised: threading.Event
+class AbstractZeroBroker:
+    host: str
+    pub_port: int
+    sub_port: int
 
-    def __init__(self, host: str = '*', pub_port: int = 5559, sub_port: int = 5560) -> None:
+    def __init__(self, host: str = '*', pub_port: int = 5559, sub_port: int = 5560, **extra: Any) -> None:
         self.host = host
         self.pub_port = pub_port
         self.sub_port = sub_port
-        self.initialised = threading.Event()
+
+    def start(self, daemon: bool = True) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+
+class ZeroBroker(AbstractZeroBroker):
+    def __init__(
+        self,
+        event: multiprocessing.synchronize.Event | threading.Event,
+        host: str = '*',
+        pub_port: int = 5559,
+        sub_port: int = 5560,
+        **kwargs: Any
+    ) -> None:
+        super().__init__(host, pub_port, sub_port, **kwargs)
+        self.initialised = event
+
+    def running(self) -> None:
+        self.initialised.set()
 
     def run(self) -> None:
         context = zmq.Context()
@@ -61,10 +81,54 @@ class ZeroBroker:
             xsub.close(0)
             context.term()
 
+
+class ThreadingZeroBroker(ZeroBroker):
+    thread: None | threading.Thread = None
+    initialised: threading.Event
+
+    def __init__(self, host: str = '*', pub_port: int = 5559, sub_port: int = 5560, **kwargs: Any) -> None:
+        super().__init__(threading.Event(), host, pub_port, sub_port, **kwargs)
+
     def start(self, daemon: bool = True) -> None:
         if not self.thread:
             self.thread = threading.Thread(target=self.run, daemon=daemon)
             self.thread.start()
+
+
+class MultiprocessingZeroBroker(AbstractZeroBroker):
+    # zmq has the unfortunate "habit" (that's really a design choice) that when it gets any sort of error, it crashes
+    # its whole process, including Python, without any possibility to recover. Using multiprocessing means we can still
+    # use pyzmq, and keep the broker under control of the main process, but can also recover from the above crash.
+    process: multiprocessing.Process
+    initialised: multiprocessing.synchronize.Event
+    thread: None | threading.Thread = None
+
+    def __init__(self, host: str = '*', pub_port: int = 5559, sub_port: int = 5560, **kwargs: Any) -> None:
+        super().__init__(host, pub_port, sub_port, **kwargs)
+        self.initialised = multiprocessing.Event()
+
+    def start(self, daemon: bool = True) -> None:
+        self.daemon = daemon
+        if not self.thread:
+            self.thread = threading.Thread(target=self.run, daemon=daemon)
+            self.thread.start()
+
+    def run(self) -> None:
+        broker_logger = logging.getLogger(__name__)
+        while not util.shutdown_event.is_set():
+            broker_logger.info(f'preparing {self}')
+            broker = ZeroBroker(self.initialised, self.host, self.pub_port, self.sub_port)
+            self.process = multiprocessing.Process(
+                target=broker.run,
+                args=(self.initialised, self.host, self.pub_port, self.sub_port),
+                daemon=self.daemon
+            )
+            broker_logger.info(f'starting {self.process}')
+            self.process.start()
+            broker_logger.info(f'waiting for {self.process}')
+            self.process.join()
+            broker_logger.info(f'{self.process} ended. will restart')
+        self.process.terminate()
 
 
 class ZeroSubscriber:
@@ -89,7 +153,7 @@ class ZeroSubscriber:
         try:
             while self.running and self.socket and not self.socket.closed and not util.is_shutting_down():
                 try:
-                    events = await self.socket.poll(timeout=5_000)  # millis
+                    events = await self.socket.poll(timeout=5_000)  # millis?
                     if events and self.running:
                         parts = await self.socket.recv_multipart()
                     else:
@@ -173,6 +237,7 @@ class ZeroPublisher:
         if self.socket is None:
             try:
                 self.start()
+                logger.info('pub socket started')
             except OSError as err:
                 logger.info(f'publisher error {err}')
         if self.socket is not None:

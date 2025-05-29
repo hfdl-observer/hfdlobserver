@@ -199,7 +199,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
                 self.clear()
                 await asyncio.sleep(0)
         else:
-            self.logger.info('empty frequency list, not starting new processes.')
+            self.logger.debug('empty frequency list, not starting new processes.')
             self.publish_listening()
 
     def publish_listening(self) -> None:
