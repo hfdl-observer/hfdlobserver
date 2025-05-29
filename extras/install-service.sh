@@ -6,12 +6,16 @@
 #
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 HFDL_PATH=$(realpath "${SCRIPT_DIR}/..")
-sudo cp "${SCRIPT_DIR}/etc-default-hfdlobserver" /etc/default/hfdlobserver \
-&& sed -e "s:[$]USER:${USER}:g" \
-    -e "s:[$]HOME:${HOME}:g" \
-    -e "s:[$]SCRIPT_DIR:${HFDL_PATH}:g" \
+
+sudo cp "${SCRIPT_DIR}/etc-default-hfdlobserver" /etc/default/hfdlobserver && \
+sed -e "s|\$USER|${USER}|g" \
+    -e "s|\$HOME|${HOME}|g" \
+    -e "s|\$SCRIPT_DIR|${HFDL_PATH}|g" \
     < "${SCRIPT_DIR}/hfdlobserver.service" \
-| sudo tee /etc/systemd/system/hfdlobserver.service \
-&& sudo systemctl daemon-reload \
-&& sudo systemctl enable hfdlobserver \
-&& echo "Systemd unit installed and enabled. You can start it now with `sudo systemctl start hfdlobserver`"
+| sudo tee /etc/systemd/system/hfdlobserver.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable hfdlobserver
+
+echo "Systemd unit installed and enabled. You can start it now with \`sudo systemctl start hfdlobserver\`"
+
