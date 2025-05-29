@@ -9,7 +9,7 @@ After=network.target
 [Service]
 EnvironmentFile=/etc/default/hfdlobserver
 User=$USER
-WorkingDirectory=$SCRIPT_DIR/hfdlobserver
+WorkingDirectory=$SCRIPT_DIR
 ExecStart=$SCRIPT_DIR/hfdlobserver.sh --headless $CONFIG_OPTIONS $LOG_OPTIONS $DEBUG_OPTIONS
 Type=simple
 Restart=always
