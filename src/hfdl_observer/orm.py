@@ -369,79 +369,99 @@ class PacketWatcher(data.AbstractPacketWatcher):
                 bin_number = int((when_ts - packet.when) // TS_FACTOR // bin_size)
                 yield bin_number, packet
 
-    async def packets_by_frequency(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_frequency, bin_size, num_bins)
+    async def packets_by_frequency(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_frequency, bin_size, num_bins)
         return r
 
-    def _packets_by_frequency(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    def _packets_by_frequency(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            data[packet.frequency][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[packet.frequency]
+            group.annotate(station_id)
+            try:
+                group[bin_number] += 1
+            except IndexError:
+                logging.error(f'unknown bin number {bin_number} {num_bins}')
+        return _data
 
-    async def packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_agent, bin_size, num_bins)
+    async def packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_agent, bin_size, num_bins)
         return r
 
-    def _packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    def _packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            data[packet.agent or 'unknown'][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[packet.agent or 'unknown']
+            group.annotate(station_id)
+            group[bin_number] += 1
+        return _data
 
-    async def packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_station, bin_size, num_bins)
+    async def packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_station, bin_size, num_bins)
         return r
 
-    def _packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    def _packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            station = network.STATIONS[packet.frequency]
-            data[station.station_id][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[station_id]
+            group.annotate(station_id)
+            group[bin_number] += 1
+        return _data
 
-    async def packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_band, bin_size, num_bins)
+    async def packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_band, bin_size, num_bins)
         return r
 
-    def _packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int | str | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    def _packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int | str | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            data[packet.frequency // 1000][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[packet.frequency // 1000]
+            group.annotate(station_id)
+            group[bin_number] += 1
+        return _data
 
     async def packets_by_frequency_set(
         self, bin_size: int, num_bins: int, frequency_sets: dict[int, str]
-    ) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_frequency_set, bin_size, num_bins)
+    ) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_frequency_set, bin_size, num_bins)
         return r
 
     def _packets_by_frequency_set(
         self, bin_size: int, num_bins: int, frequency_sets: dict[int, str]
-    ) -> Mapping[int | str | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    ) -> Mapping[int | str | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            data[frequency_sets.get(packet.frequency, str(packet.frequency))][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[frequency_sets.get(packet.frequency, str(packet.frequency))]
+            group.annotate(station_id)
+            group[bin_number] += 1
+        return _data
 
-    async def packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        r: Mapping[int | str, Sequence[int]] = await util.in_db_thread(self._packets_by_receiver, bin_size, num_bins)
+    async def packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_receiver, bin_size, num_bins)
         return r
 
-    def _packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[int | str, Sequence[int]]:
-        data: dict[int | str, list[int]] = collections.defaultdict(lambda: [0] * num_bins)
+    def _packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
+        _data: dict[int | str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
-            data[packet.receiver][bin_number] += 1
-        return data
+            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+            group = _data[packet.receiver]
+            group.annotate(station_id)
+            group[bin_number] += 1
+        return _data

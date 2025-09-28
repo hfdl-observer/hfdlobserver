@@ -91,10 +91,13 @@ class Table:
     bins: DataRows
 
     def _populate(
-        self, counts: Mapping[int | str, Sequence[int]], bin_size: int, start: Optional[datetime.datetime] = None
+        self, counts: Mapping[int | str, data.BinGroup], bin_size: int, start: Optional[datetime.datetime] = None
     ) -> None:
         self.bins = {k: [Cell(v) for v in r] for k, r in counts.items()}
-        self.row_headers = {k: RowHeader(str(k)) for k in counts.keys()}
+        self.row_headers = {}
+        for key, values in counts.items():
+            station_id = int(next(iter(values.annotations))) if values.annotations else None
+            self.row_headers[key] = RowHeader(str(key), station_id)
         when = start if start is not None else util.now()
         if counts:
             num_columns = max(len(r) for r in counts.values())
@@ -145,24 +148,33 @@ class Table:
 
 class TableByFrequency(Table):
     async def populate(self, bin_size: int, num_bins: int) -> None:
-        packets = await data.PACKET_WATCHER.packets_by_frequency( bin_size, num_bins)
+        packets = await data.PACKET_WATCHER.packets_by_frequency(bin_size, num_bins)
         super()._populate(packets, bin_size)
 
     async def fill_active_state(self) -> None:
         for ix, column in enumerate(self.column_headers):
             when = column.when if column.index else None  # column 0 is "NOW", which triggers different active logic.
-            column_active: dict[int, network.StationAvailability] = {}
+            active_by_freq: dict[int, network.StationAvailability] = {}
+            active_by_sid: dict[int, network.StationAvailability] = {}
             active = await network.UPDATER.active_for_frame(when)
             for a in active:
                 for f in a.frequencies:
-                    column_active[f] = a
+                    active_by_freq[f] = a
+                    active_by_sid[a.station_id] = a
             for freq, cells in self.bins.items():
                 cell = cells[ix]
                 row_header = self.row_headers[freq]
-                station = column_active.get(int(freq), None)
+                station: network.StationAvailability | None = None
+                if row_header.station_id:
+                    station = active_by_sid.get(row_header.station_id, None)
+                if not station:
+                    station = active_by_freq.get(int(freq), None)
+                    if station:
+                        row_header.station_id = station.station_id
+                    else:
+                        row_header.station_id = network.STATIONS[freq].station_id
 
                 if station:
-                    row_header.station_id = station.station_id
                     if station.frequencies and freq in station.frequencies:
                         cell.tag('active')
                         row_header.tag('active')
@@ -175,8 +187,6 @@ class TableByFrequency(Table):
                             pass
                         case (_):
                             row_header.tag('guess')
-                else:
-                    row_header.station_id = network.STATIONS[freq].station_id
 
 
 class TableByBand(Table):

@@ -7,7 +7,7 @@ import collections
 import dataclasses
 import datetime
 
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional
 
 import hfdl_observer.hfdl as hfdl
 
@@ -151,7 +151,18 @@ class FrequencyWatch:
     observer_id: Optional[str] = None
 
 
-BinnedPacketDataType = Mapping[int | str, Sequence[int]]
+class BinGroup(list):
+    annotations: set[int | str]
+
+    def __init__(self, num_bins: int) -> None:
+        self.annotations = set()
+        super().__init__([0] * num_bins)
+
+    def annotate(self, annotation: int | str) -> None:
+        self.annotations.add(annotation)
+
+
+BinnedPacketDataType = Mapping[int | str, BinGroup]
 
 
 class AbstractPacketWatcher:

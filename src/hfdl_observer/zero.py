@@ -61,7 +61,7 @@ class ZeroBroker(AbstractZeroBroker):
     def running(self) -> None:
         self.initialised.set()
 
-    def run(self) -> None:
+    def run(self, *args: Any, **kwargs: Any) -> None:
         context = zmq.Context()
         context.setsockopt(zmq.LINGER, 0)
 
