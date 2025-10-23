@@ -2,7 +2,7 @@ dumphfdl: {}
 receivers:
   web888:
     client:
-      recorder_path: kiwi_client/kiwirecorder.py
+      recorder_path: kiwiclient/kiwirecorder.py
     decoder: {}
 observer:
   conductor: {}
