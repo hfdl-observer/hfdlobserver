@@ -13,20 +13,18 @@ import itertools
 import json
 import logging
 import uuid
-
 from typing import Any, Awaitable, Callable, Coroutine, Optional
 
 import hfdl_observer.bus as bus
-import hfdl_observer.env
 import hfdl_observer.data as data
+import hfdl_observer.env
 import hfdl_observer.hfdl
 import hfdl_observer.messaging as messaging
 import hfdl_observer.network as network
 import hfdl_observer.util as util
 
-
 logger = logging.getLogger(__name__)
-EOL = '\n'
+EOL = "\n"
 
 
 REAPER_HORIZON = 3600
@@ -42,15 +40,15 @@ class NetworkOverview(bus.EventNotifier):
         self.last_state = {}
         self.config = config
         self.updater = updater
-        self.save_path = hfdl_observer.env.as_path(config['state'])
+        self.save_path = hfdl_observer.env.as_path(config["state"])
         self.tasks = []
         self.startables = []
-        for file_source in [hfdl_observer.env.as_path(p) for p in config.get('station_files', [])]:
+        for file_source in [hfdl_observer.env.as_path(p) for p in config.get("station_files", [])]:
             file_watcher = bus.FileRefresher(file_source, period=3600)
-            assert file_source.exists(), f'{file_source} does not exist'
+            assert file_source.exists(), f"{file_source} does not exist"
             # prime this pump... shouldn't be necessary, but.
             updater.on_systable(file_source.read_text())
-            file_watcher.watch_event('text', updater.on_systable)
+            file_watcher.watch_event("text", updater.on_systable)
             self.startables.append(file_watcher.run)
         if self.save_path:
             try:
@@ -60,22 +58,17 @@ class NetworkOverview(bus.EventNotifier):
             else:
                 logger.debug("loading previous state")
                 updater.on_community(previous)
-        for ix, url_source in enumerate(config.get('station_updates', [])):
+        for ix, url_source in enumerate(config.get("station_updates", [])):
             if not isinstance(url_source, dict):
-                url_source = {
-                    'url': url_source
-                }
-            url_watcher = bus.RemoteURLRefresher(
-                url_source['url'],
-                period=url_source.get('period', 60 + ix)
-            )
-            url_watcher.watch_event('response', updater.on_community)
+                url_source = {"url": url_source}
+            url_watcher = bus.RemoteURLRefresher(url_source["url"], period=url_source.get("period", 60 + ix))
+            url_watcher.watch_event("response", updater.on_community)
             self.startables.append(url_watcher.run)
         self.will_save = False
-        updater.watch_event('availability', self.schedule_save)
+        updater.watch_event("availability", self.schedule_save)
 
     def start(self) -> None:
-        logger.info('starting network overview')
+        logger.info("starting network overview")
         for startable in self.startables:
             self.tasks.append(util.schedule(startable()))
 
@@ -88,17 +81,17 @@ class NetworkOverview(bus.EventNotifier):
             self.will_save = True
 
             async def save_later() -> None:
-                await asyncio.sleep(self.config['save_delay'])
+                await asyncio.sleep(self.config["save_delay"])
                 await self.save()
 
             async def notify_later() -> None:
-                self.notify_event('frequencies', {s.station_id: s.frequencies for s in await self.updater.current()})
+                self.notify_event("frequencies", {s.station_id: s.frequencies for s in await self.updater.current()})
 
             util.schedule(save_later())
             util.schedule(notify_later())
 
     async def save(self) -> None:
-        logger.debug('saving ground stations frequencies')
+        logger.debug("saving ground stations frequencies")
         current = await self.updater.current()
         if self.save_path:
             self.will_save = False
@@ -106,25 +99,23 @@ class NetworkOverview(bus.EventNotifier):
             when = datetime.datetime.now(datetime.timezone.utc).isoformat()
             for station in current:
                 sd = {
-                    'id': station.station_id,
-                    'last_updated': util.datetime_to_timestamp(station.when),
-                    'name': network.STATIONS[station.station_id].station_name,
-                    'when': station.when.astimezone(datetime.timezone.utc).isoformat(),
-                    'stratum': station.stratum,
-                    'update_source': station.from_station or station.agent,
-                    'frequencies': {'active': station.frequencies}
+                    "id": station.station_id,
+                    "last_updated": util.datetime_to_timestamp(station.when),
+                    "name": network.STATIONS[station.station_id].station_name,
+                    "when": station.when.astimezone(datetime.timezone.utc).isoformat(),
+                    "stratum": station.stratum,
+                    "update_source": station.from_station or station.agent,
+                    "frequencies": {"active": station.frequencies},
                 }
                 out.append(sd)
 
-            payload: dict = {
-                'ground_stations': out
-            }
+            payload: dict = {"ground_stations": out}
             if payload != self.last_state:
-                logger.debug('saving station data')
+                logger.debug("saving station data")
                 self.last_state = payload.copy()
-                payload['when'] = when
-                self.save_path.write_text(json.dumps(payload, indent=4) + '\n')
-            self.notify_event('state', payload)  # maybe should be a deepcopy
+                payload["when"] = when
+                self.save_path.write_text(json.dumps(payload, indent=4) + "\n")
+            self.notify_event("state", payload)  # maybe should be a deepcopy
 
 
 class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
@@ -152,7 +143,7 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
 
     @functools.cached_property
     def target(self) -> str:
-        return f'@receiver+{self.name}'
+        return f"@receiver+{self.name}"
 
     def relay(self, subject: str, payload: Any) -> None:
         messaging.publish_soon(messaging.Message(self.target, subject, payload))
@@ -167,56 +158,58 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
     def on_remote_listening(self, message: messaging.Message) -> None:
         payload: dict = message.payload
         frequencies: list[int] = payload["frequencies"]
-        if self.uuid == payload['uuid']:
-            logger.info(f'{self} (remote) now listening to {len(frequencies)} frequencies')
+        if self.uuid == payload["uuid"]:
+            logger.info(f"{self} (remote) now listening to {len(frequencies)} frequencies")
             self.keepalive()
             self.channel = self.observing_channel_for(frequencies)
             for frequency in frequencies or []:
                 network.set_receiver_for_frequency(frequency, self.name)
         else:
-            logger.info(f'{self} bad notification. ({payload["uuid"]}) {len(frequencies)} frequencies #{self.pings_sent}')
-            del payload['frequencies']
+            logger.info(
+                f"{self} bad notification. ({payload['uuid']}) {len(frequencies)} frequencies #{self.pings_sent}"
+            )
+            del payload["frequencies"]
             messaging.publish_soon(messaging.Message(self.target, "deregister", payload))
             self.pings_sent += 1  # penalize me.
 
     def on_remote_pong(self, message: messaging.Message) -> None:
-        if self.uuid == message.payload.get('src'):
+        if self.uuid == message.payload.get("src"):
             self.keepalive()
 
     def __str__(self) -> str:
-        return f'{self.name}/{self.uuid} on {self.channel} ({self.last_seen})'
+        return f"{self.name}/{self.uuid} on {self.channel} ({self.last_seen})"
 
     def die(self) -> None:
-        self.relay('die', self.uuid)
+        self.relay("die", self.uuid)
 
     def listen(self, freqs: list[int]) -> None:
         self.pings_sent += 1
-        self.relay('listen', freqs)
+        self.relay("listen", freqs)
 
     def ping(self, from_uuid: str) -> None:
         self.pings_sent += 1
-        self.relay('ping', {'dst': self.uuid, 'src': from_uuid})
+        self.relay("ping", {"dst": self.uuid, "src": from_uuid})
 
     def observable_widths(self) -> list[int]:
         return self.observable_channel_widths
 
     def registered(self) -> None:
-        self.relay('registered', self.uuid)
+        self.relay("registered", self.uuid)
 
     def deregistered(self) -> None:
-        self.relay('deregistered', self.uuid)
+        self.relay("deregistered", self.uuid)
 
     def recently_alive(self) -> bool:
         return self.pings_sent <= 3
 
     def describe(self) -> str:
         if self.channel and self.channel.frequencies:
-            middle = f' @{(self.channel.center_khz)}'
+            middle = f" @{(self.channel.center_khz)}"
             freqs = len(self.channel.frequencies)
         else:
-            middle = ''
+            middle = ""
             freqs = 0
-        return f'{self.name} via {self.uuid} on {freqs} freqs{middle}'
+        return f"{self.name} via {self.uuid} on {freqs} freqs{middle}"
 
 
 class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
@@ -228,12 +221,12 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
     def __init__(self, config: dict) -> None:
         super().__init__()
         self.config = config
-        self.ranked_station_ids = config['ranked_stations']
-        ignores = config.get('ignored_frequencies', [])
+        self.ranked_station_ids = config["ranked_stations"]
+        ignores = config.get("ignored_frequencies", [])
         self.ignored_frequencies = util.normalize_ranges(ignores)
         self.proxies = []
         self.reaper = Reaper()
-        self.reaper.watch_event('dead-receiver', self.on_dead_receiver)
+        self.reaper.watch_event("dead-receiver", self.on_dead_receiver)
 
     def add_receiver(self, receiver: ReceiverProxy) -> None:
         self.proxies.append(receiver)
@@ -259,13 +252,13 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
     def log_listening(self, targetted_count: int, active_count: int, extra: int) -> None:
         t = (targetted_count, active_count, extra)
         if self.last_listening_logged != t:
-            logger.info(f'Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).')
+            logger.info(f"Listening to {targetted_count} of {active_count} active frequencies (+{extra} extra).")
             self.last_listening_logged = t
 
     def validate_proxies(self) -> None:
         for proxy in self.proxies[:]:
             if not proxy.recently_alive():
-                logger.warning(f'proxy {proxy.name}:{proxy} is dead. Removing.')
+                logger.warning(f"proxy {proxy.name}:{proxy} is dead. Removing.")
                 self.remove_receiver(proxy)
 
 
@@ -273,7 +266,7 @@ class StaticOrchestrator(AbstractOrchestrator):
     def __init__(self, config: dict) -> None:
         super().__init__(config)
         self.allocations = {}
-        for name, elements in config.get('static_allocations', {}).items():
+        for name, elements in config.get("static_allocations", {}).items():
             self.allocations[name] = [int(e) for e in elements]
 
     def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
@@ -286,7 +279,7 @@ class StaticOrchestrator(AbstractOrchestrator):
             try:
                 proxy = self.proxies[name]
             except KeyError:
-                logger.info(f'no proxy for {name}')
+                logger.info(f"no proxy for {name}")
                 continue
             if not proxy.channel.matches(frequencies):
                 proxy.listen(data.ObservingChannel(data.ChannelObserver.required_width(frequencies), frequencies))
@@ -303,7 +296,7 @@ class UniformOrchestrator(AbstractOrchestrator):
             if not widths:
                 widths = proxy_widths
             elif widths != proxy_widths:
-                raise ValueError('only uniform channel widths is currently supported')
+                raise ValueError("only uniform channel widths is currently supported")
         return list(widths)
 
     def pick_channels(
@@ -327,12 +320,12 @@ class UniformOrchestrator(AbstractOrchestrator):
         if not self.proxies:
             return []
 
-        chosen_channels = channels[:len(self.proxies)]
+        chosen_channels = channels[: len(self.proxies)]
         targetted_frequencies = []
         untargetted_frequencies = []
         chosen_frequencies = []
         for channel in chosen_channels:
-            logger.debug(f'considering {channel}')
+            logger.debug(f"considering {channel}")
             for frequency in channel.frequencies:
                 station = network.STATIONS[frequency]
                 chosen_frequencies.append(frequency)
@@ -365,7 +358,7 @@ class UniformOrchestrator(AbstractOrchestrator):
         keeps = {}
         starts: list[data.ObservingChannel] = []
         ordered_proxies = sorted(self.proxies, key=self.proxy_sort_key, reverse=True)
-        logger.debug(f'Receivers: {list(p.name for p in ordered_proxies)}')
+        logger.debug(f"Receivers: {list(p.name for p in ordered_proxies)}")
         available = ordered_proxies.copy()
         if clean_slate:
             starts = channels
@@ -375,13 +368,13 @@ class UniformOrchestrator(AbstractOrchestrator):
                     continue
                 for receiver in ordered_proxies:
                     if receiver.covers(channel):
-                        logger.debug(f'keeping {receiver}')
+                        logger.debug(f"keeping {receiver}")
                         keeps[receiver.name] = channel
                         if receiver in available:
                             available.remove(receiver)
                         break
                 else:
-                    logger.debug(f'adding {channel} to starts')
+                    logger.debug(f"adding {channel} to starts")
                     starts.append(channel)
 
         assignments: list[tuple[ReceiverProxy, list[int]]] = []
@@ -395,7 +388,7 @@ class UniformOrchestrator(AbstractOrchestrator):
                     else:
                         receiver_freqs = []
                     assignments.append((receiver, channel.frequencies))
-                    logger.debug(f'assigning {channel.frequencies} to {receiver.name} (was {receiver_freqs})')
+                    logger.debug(f"assigning {channel.frequencies} to {receiver.name} (was {receiver_freqs})")
                     self.reaper.add_channel(channel)
                     available.remove(receiver)
                     break
@@ -405,21 +398,21 @@ class UniformOrchestrator(AbstractOrchestrator):
                     # reassigned, but it's listening to a valid channel. Thus it won't be "freed", and the intended
                     # new channel cannot be assigned. In this case, we rerun the assignments, but don't try to keep
                     # old assignments. This is fairly inefficient, but it should be fairly rare.
-                    logger.info('orchestration requires clean slate processing')
+                    logger.info("orchestration requires clean slate processing")
                     return self.compute_assignments(channels, clean_slate=True)
                 unassigned.append(channel)
         if unassigned:
-            logger.warning(f'cannot allocate receivers for {unassigned}')
-            logger.info(f'channels\n{EOL.join(repr(c) for c in channels)}')
-            logger.info(f'available left\n{EOL.join(str(a) for a in available)}')
-            logger.info(f'keeps\n{EOL.join(str(a) for a in keeps.values())}')
-            logger.info(f'starts\n{EOL.join(str(s) for s in starts)}')
-            logger.info(f'proxies\n{EOL.join(str(s) for s in ordered_proxies)}')
+            logger.warning(f"cannot allocate receivers for {unassigned}")
+            logger.info(f"channels\n{EOL.join(repr(c) for c in channels)}")
+            logger.info(f"available left\n{EOL.join(str(a) for a in available)}")
+            logger.info(f"keeps\n{EOL.join(str(a) for a in keeps.values())}")
+            logger.info(f"starts\n{EOL.join(str(s) for s in starts)}")
+            logger.info(f"proxies\n{EOL.join(str(s) for s in ordered_proxies)}")
             # self.maybe_describe_receivers(force=True)
 
         for receiver in available:
             # idle receivers!
-            logger.info(f'receiver {receiver} is idle.')
+            logger.info(f"receiver {receiver} is idle.")
             assignments.append((receiver, []))
 
         return assignments
@@ -449,7 +442,7 @@ class DiverseOrchestrator(UniformOrchestrator):
                 else:
                     width = min(width, proxy_width)
         if not width:
-            raise ValueError('conductor has no observable channel widths')
+            raise ValueError("conductor has no observable channel widths")
         return [width]
 
     def merge_channels(self, channels: list[data.ObservingChannel]) -> list[data.ObservingChannel]:
@@ -472,7 +465,7 @@ class DiverseOrchestrator(UniformOrchestrator):
                     untargetted.extend([f for f in channel.frequencies if f not in active_frequencies])
                     break
             else:
-                logger.debug(f'no proxy channel for {channel}, ignoring')
+                logger.debug(f"no proxy channel for {channel}, ignoring")
 
         targetted_count = len(targetted)
         untargetted_count = len(untargetted)
@@ -508,12 +501,12 @@ class Reaper(bus.EventNotifier):
         self.last_seen[frequency] = max(packet.timestamp, self.last_seen.get(frequency, 0))
 
     def add_channel(self, channel: data.ObservingChannel) -> None:
-        logger.debug(f'reaper adding channel {channel}')
+        logger.debug(f"reaper adding channel {channel}")
         for freq in channel.frequencies:
             self.channels[freq] = channel
 
     def remove_channel(self, channel: data.ObservingChannel) -> None:
-        logger.debug(f'reaper removing channel {channel}')
+        logger.debug(f"reaper removing channel {channel}")
         for freq in channel.frequencies:
             if freq in self.channels:
                 del self.channels[freq]
@@ -525,7 +518,7 @@ class Reaper(bus.EventNotifier):
         horizon = now - REAPER_HORIZON
         for freq, channel in self.channels.items():
             if 0 < self.last_seen.get(freq, 0) < horizon:
-                self.notify_event('dead-receiver', channel.frequencies)
+                self.notify_event("dead-receiver", channel.frequencies)
 
 
 class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
@@ -537,9 +530,9 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     def __init__(self, config: collections.abc.Mapping) -> None:
         super().__init__()
         self.config = config
-        self.uuid = f'@{uuid.uuid4()}'
+        self.uuid = f"@{uuid.uuid4()}"
         self.proxies = {}
-        self.conductor = DiverseOrchestrator(config['conductor'])
+        self.conductor = DiverseOrchestrator(config["conductor"])
         messaging.subscribe(self, self.uuid)
         self.announcer = bus.PeriodicCallback(10, [self.announce], False)
         self.watchdog = bus.PeriodicCallback(30, [self.heartbeat], chatty=False)
@@ -551,14 +544,9 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
         raise NotImplementedError(self.__class__.__name__)
 
     def announce(self) -> None:
-        messaging.publish_soon(messaging.Message(
-            '/observer',
-            'available',
-            {
-                'name': self.uuid,
-                'listener': self.listener_info
-            }
-        ))
+        messaging.publish_soon(
+            messaging.Message("/observer", "available", {"name": self.uuid, "listener": self.listener_info})
+        )
 
     def add_receiver_proxy(self, proxy: ReceiverProxy) -> None:
         self.proxies[proxy.name] = proxy
@@ -566,20 +554,20 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
         self.maybe_orchestrate()
 
     def maybe_orchestrate(self) -> None:
-        delay = self.config.get('delay', 10)
+        delay = self.config.get("delay", 10)
         next_orchestrate = self.last_orchestrated + datetime.timedelta(seconds=delay)
         current_task = asyncio.current_task()
         if current_task and current_task == self.orchestration_task:
             self.orchestrate()
         elif self.orchestration_task is None:
             if next_orchestrate <= util.now():
-                logger.debug('orchestrating soon')
+                logger.debug("orchestrating soon")
                 self.orchestration_task = util.call_soon(self.orchestrate)
             else:
-                logger.debug(f'orchestrating in {delay}s')
+                logger.debug(f"orchestrating in {delay}s")
                 self.orchestration_task = util.call_later(delay, self.orchestrate)
         else:
-            logger.debug(f'not orchestrating... {self.orchestration_task}')
+            logger.debug(f"not orchestrating... {self.orchestration_task}")
 
     def orchestrate(self) -> None:
         if util.is_shutting_down():
@@ -599,15 +587,18 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
                 else:
                     untargetted.append(frequency)
 
-        self.notify_event('orchestrated', {
-            'targetted': targetted,
-            'untargetted': untargetted,
-            'active': all_active,
-        })
+        self.notify_event(
+            "orchestrated",
+            {
+                "targetted": targetted,
+                "untargetted": untargetted,
+                "active": all_active,
+            },
+        )
 
-        self.notify_event('active', all_active)
-        self.notify_event('observing', (targetted, untargetted))
-        self.notify_event('frequencies', targetted_freqs)
+        self.notify_event("active", all_active)
+        self.notify_event("observing", (targetted, untargetted))
+        self.notify_event("frequencies", targetted_freqs)
 
     def outstanding_awaitables(self) -> list[Awaitable]:
         outstanding: list[Awaitable] = [
@@ -617,16 +608,16 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
         return outstanding
 
     async def stop(self) -> None:
-        logger.debug(f'{self} stopped')
+        logger.debug(f"{self} stopped")
         await asyncio.gather(*self.outstanding_awaitables(), return_exceptions=True)
-        logger.debug(f'{self} tasks halted')
+        logger.debug(f"{self} tasks halted")
 
     def heartbeat(self) -> None:
         horizon = util.now() - datetime.timedelta(seconds=100)
         for name, proxy in list(self.proxies.items()):
             if proxy.last_seen < horizon:
                 if proxy.pings_sent > 3:
-                    logger.warning(f'proxy {name}:{proxy} appears dead. Removing.')
+                    logger.warning(f"proxy {name}:{proxy} appears dead. Removing.")
                     self.deregister_remote(proxy.name, proxy.uuid)
                 else:
                     proxy.ping(self.uuid)
@@ -643,7 +634,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
             pass
         else:
             if old_proxy.uuid != uuid:
-                messaging.publish_soon(messaging.Message(old_proxy.target, 'deregister', old_proxy.uuid))
+                messaging.publish_soon(messaging.Message(old_proxy.target, "deregister", old_proxy.uuid))
                 self.conductor.remove_receiver(old_proxy)
                 del self.proxies[name]
         proxy = ReceiverProxy(name, uuid, widths, weight)
@@ -664,12 +655,12 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     def on_remote_register(self, message: messaging.Message) -> None:
         payload: dict = message.payload
         self.register_remote(
-            payload['name'], payload['uuid'], payload['widths'], payload.get('weight', data.DEFAULT_RECEIVER_WEIGHT)
+            payload["name"], payload["uuid"], payload["widths"], payload.get("weight", data.DEFAULT_RECEIVER_WEIGHT)
         )
 
     def on_remote_deregister(self, message: messaging.Message) -> None:
         payload: dict = message.payload
-        self.deregister_remote(payload['name'], payload['uuid'])
+        self.deregister_remote(payload["name"], payload["uuid"])
 
     def on_frequencies(self, targetted_freqs: dict[int, list[int]]) -> None:
         self.maybe_orchestrate()

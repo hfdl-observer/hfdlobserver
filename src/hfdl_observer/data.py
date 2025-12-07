@@ -6,7 +6,6 @@
 import collections
 import dataclasses
 import datetime
-
 from typing import Any, Mapping, Optional
 
 import hfdl_observer.hfdl as hfdl
@@ -15,15 +14,15 @@ DEFAULT_RECEIVER_WEIGHT = 0
 
 
 class ListenerConfig:
-    proto: str = 'udp'
-    address: str = '127.0.0.1'
+    proto: str = "udp"
+    address: str = "127.0.0.1"
     port: int = 5542
 
     def __init__(self, data: dict | None = None) -> None:
         if data is not None:
-            self.proto = data['protocol']
-            self.address = data['address']
-            self.port = int(data['port'])
+            self.proto = data["protocol"]
+            self.address = data["address"]
+            self.port = int(data["port"])
 
 
 class ObservingChannel:
@@ -82,24 +81,26 @@ class ObservingChannel:
         min_freq_hz = min(frequencies) * 1000
         max_freq_hz = max(frequencies) * 1000
         if not self._frequencies or (
-            abs(min_freq_hz - self.min_hz) <= peephole_width and abs(min_freq_hz - self.max_hz) <= peephole_width
-            and abs(max_freq_hz - self.min_hz) <= peephole_width and abs(max_freq_hz - self.max_hz) <= peephole_width
+            abs(min_freq_hz - self.min_hz) <= peephole_width
+            and abs(min_freq_hz - self.max_hz) <= peephole_width
+            and abs(max_freq_hz - self.min_hz) <= peephole_width
+            and abs(max_freq_hz - self.max_hz) <= peephole_width
         ):
             self._frequencies |= set(frequencies)
             return True
         return False
 
-    def clone(self) -> 'ObservingChannel':
+    def clone(self) -> "ObservingChannel":
         return ObservingChannel(self.allowed_width_hz, self.frequencies)
 
-    def matches(self, other: 'ObservingChannel') -> bool:
+    def matches(self, other: "ObservingChannel") -> bool:
         return other is not None and self._frequencies == other._frequencies
 
     def __str__(self) -> str:
-        return f'{self.frequencies}'
+        return f"{self.frequencies}"
 
     def __repr__(self) -> str:
-        return f'ObservingChannel({self.allowed_width_hz}, {self.frequencies})'
+        return f"ObservingChannel({self.allowed_width_hz}, {self.frequencies})"
 
 
 class ChannelObserver:
@@ -121,7 +122,7 @@ class ChannelObserver:
         for available_width in widths:
             if needed <= available_width:
                 return available_width
-        raise ValueError(f'cannot accomodate {frequencies} in channel widths {widths}')
+        raise ValueError(f"cannot accomodate {frequencies} in channel widths {widths}")
 
     def observing_channel_for(self, frequencies: list[int]) -> ObservingChannel:
         return ObservingChannel(self.width_for(frequencies), frequencies)

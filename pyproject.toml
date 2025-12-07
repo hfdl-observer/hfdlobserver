@@ -1,0 +1,41 @@
+[tool.ruff]
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    ".idea",
+    ".vscode",
+    ".pytest_cache",
+    ".mypy_cache",
+    "*.md",
+    "*.json",
+    "*.yaml"
+]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "B",  # flake8-bugbear
+    "B9", # bugbear opinions
+    "E",  # pycodestyle errors
+    "ISC", # imlicit string concatenation
+    "W",  # pycodestyle warnings
+]
+ignore = [
+    "F841",  # Unused variables
+    "B904",  # Don't enforce how we format exception and raises
+    "B018", # Don't enforce unassigned variables (TODO: re-evaluate after adoption)
+    "B905", # Don't enforce strict zip usage (TODO: re-evaluate after adoption)
+    "E721", # Don't enforce is vs is not
+    "B024", # Don't enforce abstract class structure
+    "E402", # Don't enforce import positions
+]
+task-tags = ["$accrete:"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true

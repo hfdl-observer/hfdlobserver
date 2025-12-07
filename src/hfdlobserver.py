@@ -28,12 +28,10 @@ import hfdl_observer.listeners
 import hfdl_observer.manage as manage
 import hfdl_observer.messaging as messaging
 import hfdl_observer.network as network
+import hfdl_observer.orm as orm
 import hfdl_observer.settings
 import hfdl_observer.util as util
 import hfdl_observer.zero as zero
-
-import hfdl_observer.orm as orm
-
 import receivers
 
 if sys.version_info < (3, 11):
@@ -42,11 +40,7 @@ else:
     from asyncio import Runner
 
 
-logger = logging.getLogger(
-    sys.argv[0].rsplit("/", 1)[-1].rsplit(".", 1)[0]
-    if __name__ == "__main__"
-    else __name__
-)
+logger = logging.getLogger(sys.argv[0].rsplit("/", 1)[-1].rsplit(".", 1)[0] if __name__ == "__main__" else __name__)
 TRACEMALLOC = util.tobool(os.getenv("TRACEMALLOC", False))
 if TRACEMALLOC:
     import tracemalloc
@@ -54,9 +48,7 @@ if TRACEMALLOC:
 try:
     import sqlite3  # noqa: F401
 except ImportError:
-    logger.error(
-        'sqlite3 not found. You may need to run "extras/migrate-from-888.sh" or reinstall'
-    )
+    logger.error('sqlite3 not found. You may need to run "extras/migrate-from-888.sh" or reinstall')
     sys.exit(1)
 
 
@@ -92,23 +84,15 @@ class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
         receivers.ReceiverNode.__init__(self, config)
         self.packet_watcher = orm.PacketWatcher()
         hfdl_observer.data.PACKET_WATCHER = self.packet_watcher
-        self.network_overview = manage.NetworkOverview(
-            config["tracker"], network.UPDATER
-        )
+        self.network_overview = manage.NetworkOverview(config["tracker"], network.UPDATER)
         self.network_overview.watch_event("state", network.UPDATER.prune)
         self.network_overview.watch_event("frequencies", self.on_frequencies)
         self.watch_event("orchestrated", self.maybe_describe_receivers)
 
-        self.hfdl_listener = hfdl_observer.listeners.HFDLListener(
-            config.get("hfdl_listener", {})
-        )
+        self.hfdl_listener = hfdl_observer.listeners.HFDLListener(config.get("hfdl_listener", {}))
         self.hfdl_consumers = [
             hfdl_observer.listeners.HFDLPacketConsumer(
-                [
-                    hfdl_observer.listeners.HFDLPacketConsumer.any_in(
-                        "spdu", "freq_data"
-                    )
-                ],
+                [hfdl_observer.listeners.HFDLPacketConsumer.any_in("spdu", "freq_data")],
                 [network.UPDATER.on_hfdl],
             ),
             hfdl_observer.listeners.HFDLPacketConsumer(
@@ -198,9 +182,7 @@ class TraceMallocery(bus.PeriodicTask):
             try:
                 diff = snapshot.compare_to(self.last_snapshot, "lineno")
                 for e in diff:
-                    f.write(
-                        f'{e.size}|{e.size_diff}|{e.count}|{";".join(str(x) for x in e.traceback.format(5))}\n'
-                    )
+                    f.write(f"{e.size}|{e.size_diff}|{e.count}|{';'.join(str(x) for x in e.traceback.format(5))}\n")
                 # fname = f'memory-{util.now().isoformat().replace(':', '').replace('-', '')}.trace'
                 # snapshot.dump(fname)
             except Exception as err:
@@ -232,9 +214,7 @@ async def async_observe(observer: HFDLObserverController | HFDLObserverNode) -> 
 
 
 def observe(
-    on_observer: Optional[
-        Callable[[HFDLObserverController, network.CumulativePacketStats], None]
-    ] = None,
+    on_observer: Optional[Callable[[HFDLObserverController, network.CumulativePacketStats], None]] = None,
     as_controller: bool = True,
 ) -> None:
     key = "observer" if as_controller else "node"
@@ -247,9 +227,7 @@ def observe(
         with Runner() as runner:
             util.thread_local.loop = runner.get_loop()
             util.thread_local.runner = runner
-            orm.gather_prune_stats = util.tobool(
-                settings.get("show_prune_stats", False)
-            )
+            orm.gather_prune_stats = util.tobool(settings.get("show_prune_stats", False))
 
             if as_controller:
                 use_zmq = util.tobool(broker_config.get("enabled", False))
@@ -282,13 +260,9 @@ def observe(
                     runner.run(observer.shutdown())
                     runner.run(observer.stop())
                 except asyncio.CancelledError:
-                    logger.error(
-                        f"could not kill all the things: {list(asyncio.all_tasks())}"
-                    )
+                    logger.error(f"could not kill all the things: {list(asyncio.all_tasks())}")
                 except RecursionError:
-                    logger.error(
-                        f"could not kill all the things: {list(asyncio.all_tasks())}"
-                    )
+                    logger.error(f"could not kill all the things: {list(asyncio.all_tasks())}")
 
         logger.info("HFDLObserver done.")
     except Exception as exc:
@@ -299,9 +273,7 @@ def observe(
         logger.info("HFDLObserver exiting.")
 
 
-def setup_logging(
-    loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False
-) -> None:
+def setup_logging(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
     handlers: list[logging.Handler] = [logging.StreamHandler()]  # default: stderr
     if loghandler:
         handlers.append(loghandler)
@@ -344,9 +316,7 @@ def setup_logging(
     ),
     default=None,
 )
-@click.option(
-    "--quiet", help="log only warnings and errors (overrides --debug)", is_flag=True
-)
+@click.option("--quiet", help="log only warnings and errors (overrides --debug)", is_flag=True)
 def command(
     headless: bool,
     debug: bool,
@@ -355,28 +325,19 @@ def command(
     config: Optional[pathlib.Path],
     quiet: bool,
 ) -> None:
-
     settings_path = config or (pathlib.Path(__file__).parent.parent / "settings.yaml")
     try:
         hfdl_observer.settings.load(settings_path)
     except hfdl_observer.settings.DeprecatedSettingsError:
-        logger.error(
-            "A deprecated settings file is detected. It must be updated before you can continue."
-        )
+        logger.error("A deprecated settings file is detected. It must be updated before you can continue.")
         logger.error("If you have not customized the settings file yourself:")
         logger.error('- run "hfdlobserver.sh configure" and')
         logger.error(f"- copy the resulting file to {settings_path}.")
         sys.exit(1)
     # old_settings.load(config or (pathlib.Path(__file__).parent.parent / 'settings.yaml'))
-    handler = (
-        logging.handlers.TimedRotatingFileHandler(log, when="d", interval=1)
-        if log
-        else None
-    )
+    handler = logging.handlers.TimedRotatingFileHandler(log, when="d", interval=1) if log else None
     if handler is not None:
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s [%(name)s] %(levelname)s - %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s - %(message)s"))
 
     # if not executed in a tty-like thing, headless is forced.
     try:

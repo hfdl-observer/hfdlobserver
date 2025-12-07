@@ -11,23 +11,21 @@ import datetime
 import functools
 import itertools
 import logging
-
 from typing import Any, Callable, Generator, Iterable, Mapping, Optional, Sequence, Type
 
 import pony.orm  # type: ignore[import-not-found]
 import pony.orm.core  # type: ignore[import-not-found]
 
 import hfdl_observer.bus as bus
+import hfdl_observer.data as data
 import hfdl_observer.hfdl as hfdl
 import hfdl_observer.network as network
-import hfdl_observer.data as data
 import hfdl_observer.util as util
-
 
 logger = logging.getLogger(__name__)
 
 db = pony.orm.Database()
-db.bind(provider='sqlite', filename=':sharedmemory:')
+db.bind(provider="sqlite", filename=":sharedmemory:")
 
 
 TS_FACTOR = 1_000_000.0
@@ -78,7 +76,7 @@ class Untracked:
     to_dict: Callable[[], dict]
 
     def untracked_dict(self) -> dict:
-        return {k: getattr(v, 'get_untracked', lambda: v)() for k, v in self.to_dict().items()}
+        return {k: getattr(v, "get_untracked", lambda: v)() for k, v in self.to_dict().items()}
 
 
 gather_prune_stats = False
@@ -98,7 +96,7 @@ class StationAvailability(DbEntity, Untracked):
 
     def as_local(self) -> network.StationAvailability:
         d = self.untracked_dict()
-        d['when'] = to_datetime(util.timestamp_from_pseudoframe(self.valid_to_frame)) if self.valid_to_frame else None
+        d["when"] = to_datetime(util.timestamp_from_pseudoframe(self.valid_to_frame)) if self.valid_to_frame else None
         return network.StationAvailability(**d)
 
     @classmethod
@@ -115,14 +113,18 @@ class StationAvailability(DbEntity, Untracked):
         if gather_prune_stats:
             before_prune = pony.orm.count(a for a in iter(StationAvailability))
         horizon = util.pseudoframe(util.now() - datetime.timedelta(days=1))
-        pony.orm.delete(a for a in iter(StationAvailability) if a.valid_to_frame is not None and a.valid_to_frame < horizon)
+        pony.orm.delete(
+            a for a in iter(StationAvailability) if a.valid_to_frame is not None and a.valid_to_frame < horizon
+        )
         pony.orm.delete(a for a in iter(StationAvailability) if a.valid_to_frame is None and a.valid_at_frame < horizon)
         if gather_prune_stats:
             pages = int(db.execute("PRAGMA page_count;").fetchone()[0])
             # logger.debug(f'DB size is {pages * pagesize()}')
             after_prune = pony.orm.count(a for a in iter(StationAvailability))
             if after_prune < before_prune:
-                logger.info(f'pruned {before_prune - after_prune} StationAvailability ({after_prune} records, {pages} pages)')
+                logger.info(
+                    f"pruned {before_prune - after_prune} StationAvailability ({after_prune} records, {pages} pages)"
+                )
 
     @classmethod
     async def add(cls, base: network.StationAvailability) -> bool:
@@ -149,11 +151,11 @@ class StationAvailability(DbEntity, Untracked):
         else:
             if a.frequencies != base.frequencies:
                 if a.frequencies:
-                    logger.debug(f'{base.station_id} has updated frequencies? {a.frequencies} to {base.frequencies}')
+                    logger.debug(f"{base.station_id} has updated frequencies? {a.frequencies} to {base.frequencies}")
                 if base.frequencies:
                     a.frequencies = base.frequencies
             if base.valid_to_frame is not None and a.valid_to_frame != base.valid_to_frame:
-                logger.debug(f'{base.station_id} has updated valid_to {a.valid_to_frame} to {base.valid_to_frame}')
+                logger.debug(f"{base.station_id} has updated valid_to {a.valid_to_frame} to {base.valid_to_frame}")
                 a.valid_to_frame = base.valid_to_frame
         return False
 
@@ -173,7 +175,7 @@ class ReceivedPacket(DbEntity, Untracked):
 
     def as_local(self) -> data.ReceivedPacket:
         d = self.untracked_dict()
-        d['when'] = to_datetime(self.when)
+        d["when"] = to_datetime(self.when)
         return data.ReceivedPacket(**d)
 
     @classmethod
@@ -198,9 +200,11 @@ class ReceivedPacket(DbEntity, Untracked):
                 # logger.debug(f'DB size was {initial * pagesize()}, now {after * pagesize()}')
                 after_prune = pony.orm.count(r for r in iter(ReceivedPacket))
                 if after_prune < before_prune:
-                    logger.info(f'pruned {before_prune - after_prune} ReceivedPackets ({after_prune} records, {after} pages)')
+                    logger.info(
+                        f"pruned {before_prune - after_prune} ReceivedPackets ({after_prune} records, {after} pages)"
+                    )
         except Exception as err:
-            logger.error('cannot prune', exc_info=err)
+            logger.error("cannot prune", exc_info=err)
 
 
 # Not currently used
@@ -215,8 +219,8 @@ class FrequencyWatch(DbEntity, Untracked):
 
     def as_local(self) -> data.FrequencyWatch:
         d = self.untracked_dict()
-        d['started'] = to_datetime(self.started)
-        d['ended'] = to_datetime_or_none(self.ended)
+        d["started"] = to_datetime(self.started)
+        d["ended"] = to_datetime_or_none(self.ended)
         return data.FrequencyWatch(**d)
 
     @classmethod
@@ -244,7 +248,7 @@ class NetworkUpdater(network.AbstractNetworkUpdater):
         try:
             super().on_hfdl(packet_info)
         except Exception as err:
-            logger.error('HFDL packet processing', exc_info=err)
+            logger.error("HFDL packet processing", exc_info=err)
 
     # wrap in a session for database access on delegated functions.
     @pony.orm.db_session(strict=True, retry=3)
@@ -252,7 +256,7 @@ class NetworkUpdater(network.AbstractNetworkUpdater):
         try:
             super().on_community(airframes)
         except Exception as err:
-            logger.error('community update processing', exc_info=err)
+            logger.error("community update processing", exc_info=err)
 
     # wrap in a session for database access on delegated functions.
     @pony.orm.db_session(strict=True, retry=3)
@@ -262,10 +266,7 @@ class NetworkUpdater(network.AbstractNetworkUpdater):
     def _for_station(
         self, station_id: int, at: Optional[datetime.datetime] = None
     ) -> Optional[network.StationAvailability]:
-        q = pony.orm.select(
-            a for a in iter(StationAvailability)
-            if a.station_id == station_id
-        )
+        q = pony.orm.select(a for a in iter(StationAvailability) if a.station_id == station_id)
         pseudoframe = util.pseudoframe(at or util.now())
         q = q.where(lambda a: a.valid_at_frame <= pseudoframe)
         q = q.where(lambda a: a.valid_to_frame is None or a.valid_to_frame >= pseudoframe)
@@ -316,17 +317,17 @@ class PacketWatcher(data.AbstractPacketWatcher):
         try:
             ReceivedPacket(
                 when=to_timestamp(util.now()),
-                agent=packet_info.station or '(unknown)',
-                ground_station=packet_info.ground_station['id'],
+                agent=packet_info.station or "(unknown)",
+                ground_station=packet_info.ground_station["id"],
                 frequency=packet_info.frequency,
-                kind='spdu' if packet_info.is_squitter else 'lpdu',
+                kind="spdu" if packet_info.is_squitter else "lpdu",
                 uplink=packet_info.is_uplink,
                 latitude=position[0],
                 longitude=position[1],
                 receiver=network.receiver_for(packet_info.frequency),
             )
         except TypeError as exc:
-            logger.info(f'bad packet? {exc}\n{packet_info.packet}')
+            logger.info(f"bad packet? {exc}\n{packet_info.packet}")
         db.commit()
 
     def recent_packets_list(cls, since: datetime.datetime) -> Sequence[ReceivedPacket]:
@@ -384,7 +385,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
             try:
                 group[bin_number] += 1
             except IndexError:
-                logging.error(f'unknown bin number {bin_number} {num_bins}')
+                logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
 
     async def packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[int | str, data.BinGroup]:
@@ -397,7 +398,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         when = util.now() - datetime.timedelta(seconds=total_seconds)
         for bin_number, packet in self.binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
-            group = _data[packet.agent or 'unknown']
+            group = _data[packet.agent or "unknown"]
             group.annotate(station_id)
             group[bin_number] += 1
         return _data
@@ -435,7 +436,9 @@ class PacketWatcher(data.AbstractPacketWatcher):
     async def packets_by_frequency_set(
         self, bin_size: int, num_bins: int, frequency_sets: dict[int, str]
     ) -> Mapping[int | str, data.BinGroup]:
-        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(self._packets_by_frequency_set, bin_size, num_bins)
+        r: Mapping[int | str, data.BinGroup] = await util.in_db_thread(
+            self._packets_by_frequency_set, bin_size, num_bins
+        )
         return r
 
     def _packets_by_frequency_set(

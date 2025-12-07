@@ -12,7 +12,6 @@ import hfdl_observer.data as data
 import hfdl_observer.network as network
 import hfdl_observer.util as util
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,12 +29,12 @@ class Taggable:
     def tags_as_str(self) -> str:
         tags = "".join(t[0] for t in self._tags or [])
         if tags:
-            return f'[{tags}]'
-        return ''
+            return f"[{tags}]"
+        return ""
 
 
 class RowHeader(Taggable):
-    label: str = ''
+    label: str = ""
     station_id: Optional[int] = None
 
     def __init__(self, label: str, station_id: Optional[int] = None, tags: Optional[Sequence[str]] = None) -> None:
@@ -46,10 +45,10 @@ class RowHeader(Taggable):
 
     def __str__(self) -> str:
         if self.station_id:
-            sid = f'#{self.station_id}:'
+            sid = f"#{self.station_id}:"
         else:
-            sid = ''
-        return f'{self.tags_as_str()} {sid}{self.label}'
+            sid = ""
+        return f"{self.tags_as_str()} {sid}{self.label}"
 
 
 class ColumnHeader:
@@ -68,8 +67,8 @@ class ColumnHeader:
 
     def __str__(self) -> str:
         if self.offset:
-            return f'{self.label}@{self.offset}'
-        return 'NOW'
+            return f"{self.label}@{self.offset}"
+        return "NOW"
 
 
 class Cell(Taggable):
@@ -79,7 +78,7 @@ class Cell(Taggable):
         self.value = value
 
     def __str__(self) -> str:
-        return f'{self.value}{self.tags_as_str()}'
+        return f"{self.value}{self.tags_as_str()}"
 
 
 DataRows = dict[int | str, Sequence[Cell]]
@@ -139,11 +138,11 @@ class Table:
 
     def __str__(self) -> str:
         out = []
-        out.append('\t' + '\t'.join(str(header) for header in self.column_headers))
+        out.append("\t" + "\t".join(str(header) for header in self.column_headers))
         for k, cells in self:
             cells_text = "\t".join(str(cell) for cell in cells)
-            out.append('\t'.join([str(self.row_headers[k]), cells_text]))
-        return '\n'.join(out)
+            out.append("\t".join([str(self.row_headers[k]), cells_text]))
+        return "\n".join(out)
 
 
 class TableByFrequency(Table):
@@ -176,17 +175,17 @@ class TableByFrequency(Table):
 
                 if station:
                     if station.frequencies and freq in station.frequencies:
-                        cell.tag('active')
-                        row_header.tag('active')
-                    match (station.stratum):
-                        case (network.Strata.SELF.value):
-                            row_header.tag('local')
-                        case (network.Strata.SQUITTER.value):
-                            row_header.tag('network')
-                        case (None):
+                        cell.tag("active")
+                        row_header.tag("active")
+                    match station.stratum:
+                        case network.Strata.SELF.value:
+                            row_header.tag("local")
+                        case network.Strata.SQUITTER.value:
+                            row_header.tag("network")
+                        case None:
                             pass
-                        case (_):
-                            row_header.tag('guess')
+                        case _:
+                            row_header.tag("guess")
 
 
 class TableByBand(Table):
@@ -201,7 +200,7 @@ class TableByStation(Table):
         super()._populate(packets, bin_size)
         for k, rh in self.row_headers.items():
             rh.station_id = int(k)
-            rh.label = f'#{k}. {network.STATIONS[k].station_name}'
+            rh.label = f"#{k}. {network.STATIONS[k].station_name}"
 
     def key_for_row(self, row_id: int | str) -> Any:
         # we need to sort by station ID. so, indirect lookup

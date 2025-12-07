@@ -9,7 +9,6 @@ import dataclasses
 import datetime
 import functools
 import logging
-
 from enum import Enum
 from typing import Any, Optional, Sequence, Union
 
@@ -38,22 +37,22 @@ AVAILABILITY_LIFETIMES = {
 
 
 STATION_ABBREVIATIONS = {
-    1: 'SANFRAN',
-    2: 'MOLOKAI',
-    3: 'REYKJVK',
-    4: 'RIVERHD',
-    5: 'AUCKLAND',
-    6: 'HATYAI',
-    7: 'SHANNON',
-    8: 'JOBURG',
-    9: 'BARROW',
-    10: 'MUAN',
-    11: 'ALBROOK',
-    13: 'SNTACRUZ',
-    14: 'KRASNOY',
-    15: 'MUHARRAQ',
-    16: 'AGANA',
-    17: 'CANARIAS',
+    1: "SANFRAN",
+    2: "MOLOKAI",
+    3: "REYKJVK",
+    4: "RIVERHD",
+    5: "AUCKLAND",
+    6: "HATYAI",
+    7: "SHANNON",
+    8: "JOBURG",
+    9: "BARROW",
+    10: "MUAN",
+    11: "ALBROOK",
+    13: "SNTACRUZ",
+    14: "KRASNOY",
+    15: "MUHARRAQ",
+    16: "AGANA",
+    17: "CANARIAS",
 }
 
 
@@ -79,7 +78,7 @@ class Station:
     def is_assigned(self, frequency: int) -> bool:
         return frequency in self.assigned_frequencies
 
-    def update(self, other: 'Station') -> None:
+    def update(self, other: "Station") -> None:
         if self is not other:
             self.station_name = other.station_name or self.station_name
             self.latitude = other.latitude or self.latitude
@@ -111,7 +110,7 @@ class StationAvailability:
             latitude=base.latitude,
             longitude=base.longitude,
             assigned_frequencies=base.assigned_frequencies,
-            active_frequencies=self.frequencies
+            active_frequencies=self.frequencies,
         )
 
 
@@ -147,24 +146,24 @@ class AbstractNetworkUpdater(bus.EventNotifier):
             STATIONS.refresh()
         else:
             STATIONS.update_active(await self.current())
-            self.notify_event('availability', util.now())
+            self.notify_event("availability", util.now())
 
     def on_hfdl(self, packet_info: hfdl.HFDLPacketInfo) -> None:
         util.schedule(self.aon_hfdl(packet_info))
 
     async def aon_hfdl(self, packet_info: hfdl.HFDLPacketInfo) -> None:
         valid_at = util.timestamp_to_datetime(packet_info.timestamp)
-        from_station = packet_info.ground_station['id']
-        squitter = packet_info.get('spdu.gs_status', default=[])
-        performance = packet_info.get('lpdu.hfnpdu.freq_data', default=[])
+        from_station = packet_info.ground_station["id"]
+        squitter = packet_info.get("spdu.gs_status", default=[])
+        performance = packet_info.get("lpdu.hfnpdu.freq_data", default=[])
         if squitter:
-            kind = 'squitter'
+            kind = "squitter"
             packet_stratum = Strata.SQUITTER  # or SELF_SQUITTER?
-            freqs_key = 'freqs'
+            freqs_key = "freqs"
         elif performance:
-            kind = 'performance'
+            kind = "performance"
             packet_stratum = Strata.PERFORMANCE
-            freqs_key = 'heard_on_freqs'
+            freqs_key = "heard_on_freqs"
         else:
             if packet_info.ground_station:
                 STATIONS.add_observed(from_station, packet_info.frequency)
@@ -172,7 +171,7 @@ class AbstractNetworkUpdater(bus.EventNotifier):
         agent = packet_info.station or kind
         updates = 0
         for gs in squitter or performance or []:
-            stn_id = gs['gs']['id']
+            stn_id = gs["gs"]["id"]
             sid = int(stn_id) if stn_id else None
             if not sid or sid < 0:
                 continue
@@ -180,7 +179,7 @@ class AbstractNetworkUpdater(bus.EventNotifier):
             if squitter and sid == from_station:
                 stratum = Strata.SELF
             valid_to = valid_at + AVAILABILITY_LIFETIMES[stratum.value]
-            frequencies = sorted((int(sf['freq']) for sf in gs[freqs_key] if 'freq' in sf))
+            frequencies = sorted((int(sf["freq"]) for sf in gs[freqs_key] if "freq" in sf))
 
             added = await self.add(
                 StationAvailability(
@@ -205,34 +204,34 @@ class AbstractNetworkUpdater(bus.EventNotifier):
 
     async def aon_community(self, airframes: dict) -> None:
         updates = 0
-        for gs in airframes.get('ground_stations', []):
+        for gs in airframes.get("ground_stations", []):
             try:
-                sid = gs['id']
+                sid = gs["id"]
             except KeyError:
-                logger.warning(f'{self} ignoring spurious station `{gs}`')
+                logger.warning(f"{self} ignoring spurious station `{gs}`")
                 continue
             if not sid:
                 continue
 
-            last_updated = gs['last_updated']
+            last_updated = gs["last_updated"]
             if last_updated < 0:
                 last_updated += util.now().timestamp()
             try:
-                stratum = int(gs.get('stratum', Strata.CACHE.value))
+                stratum = int(gs.get("stratum", Strata.CACHE.value))
             except ValueError:
                 stratum = Strata.CACHE.value
 
             valid_at = util.timestamp_to_datetime(last_updated)
             valid_to = valid_at + AVAILABILITY_LIFETIMES[stratum]
-            frequencies = sorted(gs['frequencies'].get('active', []))
-            from_station = gs.get('update_source', None)
+            frequencies = sorted(gs["frequencies"].get("active", []))
+            from_station = gs.get("update_source", None)
 
             added = await self.add(
                 StationAvailability(
                     station_id=sid,
                     stratum=stratum,
                     frequencies=frequencies,
-                    agent='community',
+                    agent="community",
                     from_station=None if isinstance(from_station, str) else from_station,
                     valid_at_frame=util.pseudoframe(valid_at),
                     valid_to_frame=util.pseudoframe(valid_to) if valid_to is not None else None,
@@ -254,18 +253,18 @@ class AbstractNetworkUpdater(bus.EventNotifier):
         valid_at = util.now()
         valid_to = valid_at + AVAILABILITY_LIFETIMES[stratum]
         hfdl_stations: dict[int, Station] = {}
-        for gs in data['stations']:
-            sid = gs.get('id', None)
+        for gs in data["stations"]:
+            sid = gs.get("id", None)
             if not sid or sid < 0:
                 continue
-            frequencies = sorted(int(f) for f in gs['frequencies'])
+            frequencies = sorted(int(f) for f in gs["frequencies"])
 
             added = await self.add(
                 StationAvailability(
                     station_id=sid,
                     stratum=stratum,
                     frequencies=[],
-                    agent='systable',
+                    agent="systable",
                     from_station=None,
                     valid_at_frame=util.pseudoframe(valid_at),
                     valid_to_frame=util.pseudoframe(valid_to) if valid_to is not None else None,
@@ -275,11 +274,11 @@ class AbstractNetworkUpdater(bus.EventNotifier):
             if added:
                 hfdl_stations[sid] = Station(
                     station_id=sid,
-                    station_name=gs['name'],
-                    latitude=gs['lat'],
-                    longitude=gs['lon'],
+                    station_name=gs["name"],
+                    latitude=gs["lat"],
+                    longitude=gs["lon"],
                     assigned_frequencies=frequencies,
-                    active_frequencies=[]
+                    active_frequencies=[],
                 )
         if hfdl_stations:
             STATIONS.update(hfdl_stations)
@@ -309,7 +308,7 @@ class CumulativePacketStats(bus.EventNotifier):
             self.with_position += 1
         else:
             self.no_position += 1
-        self.notify_event('update', self)
+        self.notify_event("update", self)
 
 
 class StationLookup:
@@ -321,7 +320,7 @@ class StationLookup:
             self.update(initial)
 
     def update(self, systable: dict[int, Station]) -> None:
-        if hasattr(self, 'by_id'):
+        if hasattr(self, "by_id"):
             for sid, station in systable.items():
                 current = self.by_id.setdefault(sid, station)
                 current.update(station)
@@ -330,7 +329,7 @@ class StationLookup:
         self.refresh()
 
     def update_active(self, availabilities: Sequence[StationAvailability]) -> None:
-        if hasattr(self, 'by_id'):
+        if hasattr(self, "by_id"):
             for availability in availabilities:
                 self[availability.station_id].update_active(availability.frequencies)
             self.refresh()
@@ -366,9 +365,9 @@ class StationLookup:
             raise
         except AttributeError as err:
             # return default
-            logger.error(f'ID   {self.by_id}')
-            logger.error(f'FREQ {self.by_freq}')
-            raise KeyError(f'Mapping error for {key}; no mappings yet?') from err
+            logger.error(f"ID   {self.by_id}")
+            logger.error(f"FREQ {self.by_freq}")
+            raise KeyError(f"Mapping error for {key}; no mappings yet?") from err
 
     def assigned(self) -> dict[int, list[int]]:
         result = {}
@@ -392,7 +391,7 @@ RECEIVER_FREQUENCIES: dict[int, str] = {}
 
 
 def receiver_for(frequency: int) -> str:
-    return RECEIVER_FREQUENCIES.get(frequency, f'{frequency}?')
+    return RECEIVER_FREQUENCIES.get(frequency, f"{frequency}?")
 
 
 def set_receiver_for_frequency(frequency: int, receiver: str) -> None:

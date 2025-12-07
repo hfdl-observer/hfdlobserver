@@ -8,13 +8,12 @@ import itertools
 import json
 import os
 import pathlib
-import yaml
-
 from typing import Any, MutableMapping, Union
+
+import yaml
 
 import hfdl_observer.env as env
 import hfdl_observer.util as util
-
 
 base_path: pathlib.Path = pathlib.Path(os.getcwd())
 registry: MutableMapping[str, dict] = {}
@@ -31,26 +30,26 @@ def dereference(ref_key: str, type_key: str, data: MutableMapping, *configs: Mut
 
 def dereference_output(output: MutableMapping, *configs: MutableMapping) -> MutableMapping:
     try:
-        key = output['output']
+        key = output["output"]
     except KeyError:
         return output
-    defaults = [config.get('outputs', {}).get(key, {}) for config in configs]
-    return util.DeepChainMap({k: v for k, v in output.items() if k != 'output'}, *defaults)
+    defaults = [config.get("outputs", {}).get(key, {}) for config in configs]
+    return util.DeepChainMap({k: v for k, v in output.items() if k != "output"}, *defaults)
 
 
 def dereference_dumphfdl(dumphfdl: MutableMapping, *configs: MutableMapping) -> MutableMapping:
     try:
-        key = dumphfdl['dumphfdl']
+        key = dumphfdl["dumphfdl"]
     except KeyError:
         return dumphfdl
 
-    bases = [config.get('dumphfdl', {}).get(key, {}) for config in configs]
+    bases = [config.get("dumphfdl", {}).get(key, {}) for config in configs]
     complex_outputs: dict[str, list[MutableMapping]] = {}
     resolved_outputs = []
     source_outputs = [dumphfdl] + bases
-    for output in itertools.chain.from_iterable(s['output'] for s in source_outputs if 'output' in s):
+    for output in itertools.chain.from_iterable(s["output"] for s in source_outputs if "output" in s):
         try:
-            key = output['output']
+            key = output["output"]
         except KeyError:
             resolved_outputs.append(output)
         else:
@@ -58,15 +57,15 @@ def dereference_dumphfdl(dumphfdl: MutableMapping, *configs: MutableMapping) -> 
     for k, mappings in complex_outputs.items():
         chained = util.DeepChainMap(*mappings) if len(mappings) > 1 else mappings[0]
         resolved_outputs.append(dereference_output(chained, *configs))
-    outputs = {'output': resolved_outputs}
+    outputs = {"output": resolved_outputs}
 
-    declared = {k: v for k, v in dumphfdl.items() if k != 'output'}
-    defaults = [{k: v for k, v in base.items() if k != 'output'} for base in bases]
+    declared = {k: v for k, v in dumphfdl.items() if k != "output"}
+    defaults = [{k: v for k, v in base.items() if k != "output"} for base in bases]
     return util.DeepChainMap(outputs, declared, *defaults)
 
 
 def dereference_decoder(decoder: MutableMapping, *configs: MutableMapping) -> MutableMapping:
-    if 'dumphfdl' in decoder:
+    if "dumphfdl" in decoder:
         return dereference_dumphfdl(decoder, *configs)
     return decoder
 
@@ -74,17 +73,17 @@ def dereference_decoder(decoder: MutableMapping, *configs: MutableMapping) -> Mu
 def dereference_receiver(receiver: MutableMapping, *configs: MutableMapping, level: int = 0) -> MutableMapping:
     # print(f'dereference receiver {receiver.get('name', 'anon')} = {receiver.get('receiver', 'n/a')}')
     try:
-        key = receiver['receiver']
+        key = receiver["receiver"]
     except KeyError:
         return receiver
     if level > 3:  # really naive way to break cycles. But really, you shouldn't be doing this much nesting.
         return receiver
-    templates = [config.get('receivers', {}).get(key, {}) for config in configs]
+    templates = [config.get("receivers", {}).get(key, {}) for config in configs]
     sources = [receiver] + templates
-    _decoder = util.DeepChainMap(*[s['decoder'] for s in sources if 'decoder' in s])
-    decoder = {'decoder': dereference_decoder(_decoder, *configs)}
+    _decoder = util.DeepChainMap(*[s["decoder"] for s in sources if "decoder" in s])
+    decoder = {"decoder": dereference_decoder(_decoder, *configs)}
 
-    declared = {k: v for k, v in receiver.items() if k != 'decoder'}
+    declared = {k: v for k, v in receiver.items() if k != "decoder"}
     templated = [dereference_receiver(template, *configs, level=level + 1) for template in templates]
 
     return util.DeepChainMap(decoder, declared, *templated)
@@ -119,18 +118,18 @@ def load(filepath: Union[str, pathlib.Path]) -> MutableMapping:
 
     global registry
     registry = yaml.safe_load(path.read_text())
-    if 'config' in registry:
+    if "config" in registry:
         raise DeprecatedSettingsError()
-    for parent_key in ['observer', 'node']:
+    for parent_key in ["observer", "node"]:
         parent = registry.get(parent_key, {})
-        if 'local_receivers' in parent:
-            parent['local_receivers'] = dereference_receivers(parent['local_receivers'], registry, defaults)
+        if "local_receivers" in parent:
+            parent["local_receivers"] = dereference_receivers(parent["local_receivers"], registry, defaults)
         else:
-            parent['local_receivers'] = dereference_receivers(
-                defaults[parent_key]['local_receivers'], registry, defaults
+            parent["local_receivers"] = dereference_receivers(
+                defaults[parent_key]["local_receivers"], registry, defaults
             )
     _globals = globals()
-    for key in ['observer', 'cui', 'node', 'viewer', 'aggregator']:
+    for key in ["observer", "cui", "node", "viewer", "aggregator"]:
         _globals[key] = chained(key, registry, defaults)
     return registry
 
@@ -150,22 +149,15 @@ defaults: dict[str, Any] = {
         "tracker": {
             "save_delay": 8,
             "state": "stations.state",
-            "station_files": [
-                "systable.conf"
-            ],
-            "station_updates": [
-                {
-                    "url": "https://hfdl.observer/active.json",
-                    "period": 61
-                }
-            ]
+            "station_files": ["systable.conf"],
+            "station_updates": [{"url": "https://hfdl.observer/active.json", "period": 61}],
         },
         "messaging": {
             "host": "0.0.0.0",
             "pub_port": 5559,
             "sub_port": 5560,
         },
-        "local_receivers": [{'receiver': 'web888', 'name': f'web888-{i:02}'} for i in range(1, 14)]
+        "local_receivers": [{"receiver": "web888", "name": f"web888-{i:02}"} for i in range(1, 14)],
     },
     "cui": {
         "ticker": {
@@ -178,21 +170,8 @@ defaults: dict[str, Any] = {
             "flexible_width": False,
         }
     },
-    "node": {
-        "local_receivers": [],
-        "messaging": {
-            "host": "0.0.0.0",
-            "pub_port": 5559,
-            "sub_port": 5560
-        }
-    },
-    "viewer": {
-        "messaging": {
-            "host": "0.0.0.0",
-            "pub_port": 5559,
-            "sub_port": 5560
-        }
-    },
+    "node": {"local_receivers": [], "messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},
+    "viewer": {"messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},
     "dumphfdl": {
         "default": {
             "quiet": True,
@@ -201,37 +180,15 @@ defaults: dict[str, Any] = {
             "system_table": "systable.conf",
             "system_table_save": "systable_updated.conf",
             "output": [
-                {
-                    "output": "hfdl_observer"
-                },
-            ]
+                {"output": "hfdl_observer"},
+            ],
         }
     },
     "outputs": {
-        "hfdl_observer": {
-            "format": "json",
-            "protocol": "udp",
-            "address": "hfdl.observer",
-            "port": 5542
-        },
-        "acars_router": {
-            "format": "json",
-            "protocol": "udp",
-            "address": "acars_router.local",
-            "port": 5556
-        },
-        "acarshub": {
-            "format": "json",
-            "protocol": "udp",
-            "address": "acarshub.local",
-            "port": 5556
-        },
-        "readsb": {
-            "format": "basestation",
-            "protocol": "tcp",
-            "address": "readsb.local",
-            "port": 30009
-        }
+        "hfdl_observer": {"format": "json", "protocol": "udp", "address": "hfdl.observer", "port": 5542},
+        "acars_router": {"format": "json", "protocol": "udp", "address": "acars_router.local", "port": 5556},
+        "acarshub": {"format": "json", "protocol": "udp", "address": "acarshub.local", "port": 5556},
+        "readsb": {"format": "basestation", "protocol": "tcp", "address": "readsb.local", "port": 30009},
     },
     "receivers": {
         "web888": {
@@ -257,26 +214,13 @@ defaults: dict[str, Any] = {
                     "13": "agc-13M.yaml",
                     "15": "agc-15M.yaml",
                     "17": "agc-17M.yaml",
-                    "21": "agc-21M.yaml"
-                }
+                    "21": "agc-21M.yaml",
+                },
             },
-            "decoder": {
-                "type": "IQDecoderProcess",
-                "dumphfdl": "default"
-            }
+            "decoder": {"type": "IQDecoderProcess", "dumphfdl": "default"},
         },
-        "pipe888": {
-            "type": "Web888PipeReceiver",
-            "client": {
-                "type": "KiwiClient"
-            },
-            "decoder": {
-                "type": "IQDecoder"
-            }
-        },
-        "dummy": {
-            "type": "DummyReceiver"
-        },
+        "pipe888": {"type": "Web888PipeReceiver", "client": {"type": "KiwiClient"}, "decoder": {"type": "IQDecoder"}},
+        "dummy": {"type": "DummyReceiver"},
         "airspyhf": {
             "type": "DirectReceiver",
             "decoder": {
@@ -284,11 +228,8 @@ defaults: dict[str, Any] = {
                 "settle_time": 1,
                 "sample-rates": [912000, 768000, 650000, 456000, 384000, 228000, 192000],
                 "dumphfdl": "default",
-                "soapysdr": {
-                    "driver": "airspyhf",
-                    "gain": None
-                }
-            }
+                "soapysdr": {"driver": "airspyhf", "gain": None},
+            },
         },
         "rx888mk2": {
             "type": "DirectReceiver",
@@ -297,11 +238,9 @@ defaults: dict[str, Any] = {
                 "settle_time": 1,
                 "sample-rates": [2000000, 4000000, 8000000],
                 "dumphfdl": "default",
-                "soapysdr": {
-                    "driver": "SDDC"
-                },
-                "gain": 89
-            }
+                "soapysdr": {"driver": "SDDC"},
+                "gain": 89,
+            },
         },
         "rspdx+sdrplay": {
             "type": "DirectReceiver",
@@ -309,21 +248,27 @@ defaults: dict[str, Any] = {
                 "type": "SoapySDRDecoder",
                 "settle_time": 9,
                 "sample-rates": [
-                    62500, 96000, 125000, 192000, 250000, 384000, 500000, 768000, 1000000,
+                    62500,
+                    96000,
+                    125000,
+                    192000,
+                    250000,
+                    384000,
+                    500000,
+                    768000,
+                    1000000,
                     [2000000, 3000000],
                 ],
                 "dumphfdl": "default",
-                "soapysdr": {
-                    "driver": "sdrplay"
-                },
+                "soapysdr": {"driver": "sdrplay"},
                 "device-settings": {
                     "rfnotch_ctrl": False,
                     "dabnotch_ctrl": False,
                     "agc_setpoint": -14,
                     "biasT_ctrl": False,
-                    "rfgain_sel": 0
-                }
-            }
+                    "rfgain_sel": 0,
+                },
+            },
         },
         "rsp1a+sdrplay": {
             "type": "DirectReceiver",
@@ -332,17 +277,15 @@ defaults: dict[str, Any] = {
                 "settle_time": 10,
                 "sample-rates": [1300000, 1536000, 2048000, [2000000, 5500000]],
                 "dumphfdl": "default",
-                "soapysdr": {
-                    "driver": "sdrplay"
-                },
+                "soapysdr": {"driver": "sdrplay"},
                 "device-settings": {
                     "rfnotch_ctrl": False,
                     "dabnotch_ctrl": False,
                     "agc_setpoint": -14,
                     "biasT_ctrl": False,
-                    "rfgain_sel": 0
-                }
-            }
+                    "rfgain_sel": 0,
+                },
+            },
         },
         "rsp1a+miri": {
             "type": "DirectReceiver",
@@ -350,19 +293,11 @@ defaults: dict[str, Any] = {
                 "type": "SoapySDRDecoder",
                 "sample-rates": [1300000, 1536000, 2048000, 4000000, 5000000],
                 "dumphfdl": "default",
-                "soapysdr": {
-                    "driver": "soapyMiri",
-                    "bufflen": 65536,
-                    "buffers": 64,
-                    "asyncBuffs": 32
-                },
-                "device-settings": {
-                    "flavour": "SDRplay",
-                    "biastee": False
-                }
-            }
-        }
-    }
+                "soapysdr": {"driver": "soapyMiri", "bufflen": 65536, "buffers": 64, "asyncBuffs": 32},
+                "device-settings": {"flavour": "SDRplay", "biastee": False},
+            },
+        },
+    },
 }
 observer: MutableMapping = {}
 cui: MutableMapping = {}
@@ -381,17 +316,18 @@ def get_dumper() -> type[yaml.SafeDumper]:
     return safe_dumper
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     if len(sys.argv) > 1:
         filename = sys.argv[1]
     else:
-        filename = 'custom.yaml'
+        filename = "custom.yaml"
     loaded = load(filename)
     resolved = dict(loaded)
-    for key in ['observer', 'cui', 'node', 'viewer']:
+    for key in ["observer", "cui", "node", "viewer"]:
         resolved[key] = chained(key, loaded, defaults)
     print(yaml.dump(loaded, Dumper=get_dumper()))
     # out = yaml.safe_dump([d.dict() for d in observer['local_receivers']])
     # print(out)
-    print(json.dumps(dict(resolved), indent=4, default=lambda o: o.dict() if hasattr(o, 'dict') else list(o)))
+    print(json.dumps(dict(resolved), indent=4, default=lambda o: o.dict() if hasattr(o, "dict") else list(o)))

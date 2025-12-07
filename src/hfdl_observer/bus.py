@@ -9,12 +9,12 @@ import collections
 import json
 import logging
 import pathlib
-
 from typing import Any, AsyncGenerator, Callable, Optional, Union
 
 import requests
 
 import hfdl_observer.util as util
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,9 +40,9 @@ class JSONWatcher(EventNotifier):
         try:
             data = json.loads(text)
         except json.JSONDecodeError as e:
-            logger.warning(f'ignoring JSON decode error for {self}', exc_info=e)
+            logger.warning(f"ignoring JSON decode error for {self}", exc_info=e)
         else:
-            self.notify_event('json', data)
+            self.notify_event("json", data)
 
 
 class RoutineTask(EventNotifier):
@@ -64,7 +64,7 @@ class RoutineTask(EventNotifier):
         pass
 
 
-class PeriodicTask():
+class PeriodicTask:
     chatty: bool = True
 
     def __init__(self, period: float):
@@ -83,21 +83,21 @@ class PeriodicTask():
         self.prepare()
         while self.enabled and not util.is_shutting_down():
             if self.chatty:
-                logger.debug(f'{self} executing')
+                logger.debug(f"{self} executing")
             try:
                 await self.execute()
             except asyncio.CancelledError:
                 break
             except Exception as err:
-                logger.error(f'{self} encountered error {err}')
+                logger.error(f"{self} encountered error {err}")
             await asyncio.sleep(self.period)
 
     def start(self) -> None:
-        if not hasattr(self, 'task'):
+        if not hasattr(self, "task"):
             self.task = util.schedule(self.run())
 
     async def stop(self) -> None:
-        task = getattr(self, 'task')
+        task = getattr(self, "task")
         if task:
             self.enabled = False
             task.cancel()
@@ -116,10 +116,10 @@ class PeriodicCallback(PeriodicTask):
                 try:
                     callback()
                 except Exception as err:
-                    logger.error(f'{self} {callback} encountered error {err}')
+                    logger.error(f"{self} {callback} encountered error {err}")
 
     def __str__(self) -> str:
-        return f'<PeriodicCallback@{self.period} [{";".join(str(c) for c in self.callbacks)}]>'
+        return f"<PeriodicCallback@{self.period} [{';'.join(str(c) for c in self.callbacks)}]>"
 
 
 class RemoteURLRefresher(PeriodicTask, EventNotifier):
@@ -133,15 +133,15 @@ class RemoteURLRefresher(PeriodicTask, EventNotifier):
         try:
             response = await util.in_thread(requests.get, self.url)
         except requests.exceptions.ReadTimeout as e:
-            logger.warning(f'suppressing timeout on {self.url}.', exc_info=e)
+            logger.warning(f"suppressing timeout on {self.url}.", exc_info=e)
             return
         try:
             txt = response.text
             data = json.loads(txt)
         except (json.JSONDecodeError, requests.JSONDecodeError):
-            logger.warning(f'update for {self.url} failed. ignoring...')
+            logger.warning(f"update for {self.url} failed. ignoring...")
             return
-        self.notify_event('response', data)
+        self.notify_event("response", data)
 
     def __str__(self) -> str:
         return f"<RemoteURLRefresher: `{self.url}` @ {self.period}>"
@@ -157,9 +157,9 @@ class FileRefresher(PeriodicTask, EventNotifier):
         try:
             text = self.path.read_text()
         except IOError as e:
-            logger.warning(f'suppressing file read error at {self.path}.', exc_info=e)
+            logger.warning(f"suppressing file read error at {self.path}.", exc_info=e)
         else:
-            self.notify_event('text', text)
+            self.notify_event("text", text)
 
     def __str__(self) -> str:
         return f"<FileRefresher: `{self.path}` @ {self.period}>"
@@ -169,7 +169,7 @@ class JSONFileRefresher(FileRefresher, JSONWatcher):
     def __init__(self, path: Union[pathlib.Path, str], period: int = 60):
         JSONWatcher.__init__(self)
         FileRefresher.__init__(self, path, period)
-        self.watch_event('text', self.jsonify)
+        self.watch_event("text", self.jsonify)
 
     def __str__(self) -> str:
         return f"<JSONFileRefresher: `{self.path}` @ {self.period}>"
@@ -185,21 +185,21 @@ class StreamWatcher(RoutineTask, EventNotifier):
         self.debug_logger = debug_logger
 
     async def run(self) -> None:
-        logger.debug(f'watching {self.stream}')
+        logger.debug(f"watching {self.stream}")
         async with util.aclosing(self.stream) as stream:
             async for data in stream:
-                line = data.decode('utf8').rstrip()
+                line = data.decode("utf8").rstrip()
                 if self.debug_logger:
                     self.debug_logger.info(line)
-                self.notify_event('line', line)
+                self.notify_event("line", line)
                 await asyncio.sleep(0)
                 if not self.enabled:
                     break
-        logger.debug(f'finished watching {self.stream}')
+        logger.debug(f"finished watching {self.stream}")
 
 
 class JSONStreamWatcher(StreamWatcher, JSONWatcher):
     def __init__(self, stream: AsyncGenerator):
         JSONWatcher.__init__(self)
         StreamWatcher.__init__(self, stream)
-        self.watch_event('line', self.jsonify)
+        self.watch_event("line", self.jsonify)

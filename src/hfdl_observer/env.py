@@ -4,10 +4,9 @@
 # TL;DR: BSD 3-clause
 #
 
-import pathlib
 import os
+import pathlib
 import shutil
-
 
 base_path = pathlib.Path(os.getcwd())
 

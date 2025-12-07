@@ -21,8 +21,7 @@ import sys
 import termios
 import threading
 import uuid
-
-from typing import Any, AsyncGenerator, Callable, Coroutine, IO, Union
+from typing import IO, Any, AsyncGenerator, Callable, Coroutine, Union
 
 logger = logging.getLogger(__name__)
 thread_local = threading.local()
@@ -33,9 +32,9 @@ shutdown_event = asyncio.Event()
 
 def tobool(val: Union[bool, str, int]) -> bool:
     val = val.lower() if isinstance(val, str) else val
-    if val in ('y', 'yes', 't', 'true', 'on', '1', True, 1):
+    if val in ("y", "yes", "t", "true", "on", "1", True, 1):
         return True
-    elif val in ('n', 'no', 'f', 'false', 'off', '0', False, 0):
+    elif val in ("n", "no", "f", "false", "off", "0", False, 0):
         return False
     else:
         raise ValueError("invalid truth value %r" % (val,))
@@ -77,14 +76,14 @@ def deserialise_station_table(station_table: str) -> dict:
     # sed -e 's/(/[/g' -e s'/)/]/g' -e 's/=/:/g' -e 's/;/,/g' -e 's/^\s*\([a-z]\+\) /"\1"/' >> ~/gs.json
     # does most of the conversion, but not quite.
     # first the simple substitutions
-    for f, t in [('(', '['), (')', ']'), ('=', ':'), (';', ',')]:
+    for f, t in [("(", "["), (")", "]"), ("=", ":"), (";", ",")]:
         station_table = station_table.replace(f, t)
     # quote the keys...
-    lines = station_table.split('\n')
+    lines = station_table.split("\n")
     for ix, line in enumerate(lines):
-        lines[ix] = re.sub(r'^\s*([a-z]+) ', r'"\1"', line).strip()
+        lines[ix] = re.sub(r"^\s*([a-z]+) ", r'"\1"', line).strip()
     # remove trailing commas
-    station_table = '{' + ''.join(lines).replace(',}', '}').replace(',]', ']').strip(',') + '}'
+    station_table = "{" + "".join(lines).replace(",}", "}").replace(",]", "]").strip(",") + "}"
     # in theory it is now JSON decodable.
     return dict(json.loads(station_table))
 
@@ -151,7 +150,7 @@ class Pipe:
         self.close_write()
         self.close_read()
 
-    def __enter__(self) -> 'Pipe':
+    def __enter__(self) -> "Pipe":
         return self
 
     def __exit__(self, *_: Any) -> None:
@@ -160,7 +159,7 @@ class Pipe:
 
 def is_bad_file_descriptor(error: OSError) -> bool:
     # for now, naive.
-    return 'Errno 9' in str(error)
+    return "Errno 9" in str(error)
 
 
 class DeepChainMap(collections.ChainMap):
@@ -180,10 +179,10 @@ class DeepChainMap(collections.ChainMap):
     def dict(self) -> dict:
         d = dict(self)
         for k, v in list(d.items()):
-            if hasattr(v, 'dict'):
+            if hasattr(v, "dict"):
                 d[k] = v.dict()
             elif isinstance(v, list):
-                d[k] = list(e.dict() if hasattr(e, 'dict') else e for e in v)
+                d[k] = list(e.dict() if hasattr(e, "dict") else e for e in v)
         return d
 
 
@@ -215,7 +214,7 @@ async def cleanup_task(task: asyncio.Task) -> None:
     except asyncio.CancelledError:
         pass
     except Exception as exc:
-        logger.warning(f'{task} produced {exc} on cleanup')
+        logger.warning(f"{task} produced {exc} on cleanup")
 
 
 class async_reader(contextlib.AbstractAsyncContextManager):
@@ -251,7 +250,14 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
     old_settings = termios.tcgetattr(fd)
 
     def read_with_timeout() -> str | None:
-        if select.select([sys.stdin,], [], [], 5)[0]:
+        if select.select(
+            [
+                sys.stdin,
+            ],
+            [],
+            [],
+            5,
+        )[0]:
             return sys.stdin.read(1)
         return None
 
@@ -271,7 +277,7 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
                 logger.debug("no more keystrokes")
                 break
             if ord(key) in (3, 4):  # ^C, ^D
-                logger.warning('break received')
+                logger.warning("break received")
                 shutdown_event.set()
                 break
             if pacing > 0:
@@ -281,7 +287,7 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
                 last_keystroke = when
             yield key
     except Exception as err:
-        logger.error('keyboard error?', exc_info=err)
+        logger.error("keyboard error?", exc_info=err)
         raise err
     finally:
         logger.debug("keyboard loop finished")
@@ -320,7 +326,7 @@ class AsyncKeyboard(AbstractKeyboard):
             async for key in keystrokes:
                 self.on_keystroke(key)
         except Exception as err:
-            logger.error('AsyncKeyboard error', exc_info=err)
+            logger.error("AsyncKeyboard error", exc_info=err)
 
 
 Keyboard = AsyncKeyboard
@@ -341,7 +347,7 @@ class aclosing(contextlib.AbstractAsyncContextManager):
 
 async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, 'executor'):
+    if not hasattr(thread_local, "executor"):
         thread_local.executor = concurrent.futures.ThreadPoolExecutor(max_workers=64)
     loop: asyncio.AbstractEventLoop = thread_local.loop
 
@@ -353,7 +359,7 @@ async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
 
 async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, 'db_executor'):
+    if not hasattr(thread_local, "db_executor"):
         thread_local.db_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     loop: asyncio.AbstractEventLoop = thread_local.loop
 
@@ -381,6 +387,6 @@ class Message:
             body = self.payload
         else:
             body = self.payload.__class__.__name__
-            if hasattr(self.payload, '__len__'):
-                body = f'{body} l={len(self.payload)}'
-        return f'<Message: t={self.target} s={self.subject} b={body} f={self.sender}>'
+            if hasattr(self.payload, "__len__"):
+                body = f"{body} l={len(self.payload)}"
+        return f"<Message: t={self.target} s={self.subject} b={body} f={self.sender}>"

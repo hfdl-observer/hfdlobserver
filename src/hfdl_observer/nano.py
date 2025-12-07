@@ -2,19 +2,17 @@ import asyncio
 import json
 import logging
 import threading
-
 from typing import Any, Callable, Optional
 
 import pynng  # type: ignore[import-not-found]
 
 import hfdl_observer.util as util
 
-
 logger = logging.getLogger(__name__)
 
 
 # backwards compatibility ish
-QueueShutDown = getattr(asyncio, 'QueueShutDown', asyncio.QueueEmpty)
+QueueShutDown = getattr(asyncio, "QueueShutDown", asyncio.QueueEmpty)
 
 
 Message = util.Message
@@ -46,10 +44,10 @@ class NanoSubscriber:
                         pass
                     else:
                         if data:
-                            target, subject, body = data.decode().split('|', 2)
+                            target, subject, body = data.decode().split("|", 2)
                             payload = json.loads(body)
                             message = Message(target=target, subject=subject, payload=payload)
-                            logger.debug(f'received {message}')
+                            logger.debug(f"received {message}")
                             for filter, callback in self.callbacks:
                                 if not filter or filter(message):
                                     util.call_soon(callback, message)
@@ -68,7 +66,7 @@ class NanoPublisher:
 
     def __init__(self, host: str, port: int):
         self.queue = asyncio.Queue()
-        self.url = f'tcp://{host}:{port}'
+        self.url = f"tcp://{host}:{port}"
 
     def start(self) -> None:
         if self.task is None:
@@ -96,31 +94,30 @@ class NanoPublisher:
                         self.running = False
 
     async def publish(self, message: Message) -> None:
-        await self._publish(f'{message.target}|{message.subject}', json.dumps(message.payload))
+        await self._publish(f"{message.target}|{message.subject}", json.dumps(message.payload))
 
     async def multi_publish(self, targets: list[str], subject: str, payload: Any) -> None:
         json_payload = json.dumps(payload)
         await asyncio.gather(
-            *[self._publish(f'{target}|{subject}', json_payload) for target in targets],
-            return_exceptions=True
+            *[self._publish(f"{target}|{subject}", json_payload) for target in targets], return_exceptions=True
         )
 
     async def _publish(self, channel: str, payload: str) -> None:
         if self.task is None:
             # logger.info('publisher not connected')
             self.start()
-            logger.debug(f'publish c={channel} l={len(payload)}')
-            await self.queue.put(f'{channel}|{payload}')
+            logger.debug(f"publish c={channel} l={len(payload)}")
+            await self.queue.put(f"{channel}|{payload}")
 
 
 class NanoBroker:
     thread: Optional[threading.Thread] = None
     running: bool = False
 
-    def __init__(self, host: str = '*', pub_port: int = 5559, sub_port: int = 5560) -> None:
+    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560) -> None:
         # yes, reversed
-        self.pub_url = f'tcp://{host}:{sub_port}'
-        self.sub_url = f'tcp://{host}:{pub_port}'
+        self.pub_url = f"tcp://{host}:{sub_port}"
+        self.sub_url = f"tcp://{host}:{pub_port}"
 
     def run(self) -> None:
         self.running = True

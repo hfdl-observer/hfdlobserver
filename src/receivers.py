@@ -12,18 +12,15 @@ import functools
 import logging
 import random
 import uuid
-
 from typing import Any, AsyncGenerator, Awaitable, MutableMapping, Optional
 
+import decoders
 import hfdl_observer.bus as bus
 import hfdl_observer.data as data
 import hfdl_observer.messaging as messaging
 import hfdl_observer.process as process
 import hfdl_observer.util as util
-
-import decoders
 import iqsources
-
 
 logger = logging.getLogger(__name__)
 
@@ -48,26 +45,26 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         self.frequencies = []
         self.last_seen = util.now()
         messaging.subscribe(self, self.target)
-        messaging.subscribe(self, '/', 'available')
-        messaging.subscribe(self, '/', 'unavailable')
+        messaging.subscribe(self, "/", "available")
+        messaging.subscribe(self, "/", "unavailable")
         self.watchdog = bus.PeriodicCallback(60, [self.heartbeat], chatty=False)
         super().__init__()
 
     def payload(self, **data: Any) -> dict:
         _payload = {
-            'name': self.name,
-            'uuid': self.uuid,
+            "name": self.name,
+            "uuid": self.uuid,
         }
         _payload.update(data)
         return _payload
 
     @functools.cached_property
     def target(self) -> str:
-        return f'@receiver+{self.name}'
+        return f"@receiver+{self.name}"
 
     def on_remote_listen(self, message: messaging.Message) -> None:
         self.keepalive()
-        if (message.target == self.target):
+        if message.target == self.target:
             payload: list[int] = message.payload
             util.schedule(self.listen(payload))
         else:
@@ -90,11 +87,11 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
             uuid: str = message.payload
             requester: str = str(self.conductor)
         else:
-            requester = message.payload['src']
-            uuid = message.payload['dst']
+            requester = message.payload["src"]
+            uuid = message.payload["dst"]
         if uuid == self.uuid:
             self.keepalive()
-            messaging.publish_soon(messaging.Message(self.target, 'pong', self.payload(to=requester, src=self.uuid)))
+            messaging.publish_soon(messaging.Message(self.target, "pong", self.payload(to=requester, src=self.uuid)))
         else:
             # observer is confused. Thinks another node is us. Reregister to clear it up.
             # This could cause flapping if there are two nodes with the same name actively running and registering.
@@ -102,16 +99,16 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
 
     def on_remote_die(self, _: messaging.Message) -> None:
         # self.keepalive()
-        logger.warning(f'{self} received DIE order')
+        logger.warning(f"{self} received DIE order")
         self.deregister()
 
     def on_remote_available(self, message: messaging.Message) -> None:
-        if self.registered and message.payload['name'] == self.conductor:
+        if self.registered and message.payload["name"] == self.conductor:
             self.keepalive()
         else:
             payload: dict = message.payload
-            self.conductor = payload['name']
-            self.listener = data.ListenerConfig(payload['listener'])
+            self.conductor = payload["name"]
+            self.listener = data.ListenerConfig(payload["listener"])
             self.register()
 
     def on_remote_unavailable(self, _: messaging.Message) -> None:
@@ -126,18 +123,17 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
             messaging.publish_soon(
                 messaging.Message(
                     self.conductor,
-                    'register',
+                    "register",
                     self.payload(
-                        widths=self.observable_widths(),
-                        weight=self.config.get('weight', data.DEFAULT_RECEIVER_WEIGHT)
-                    )
+                        widths=self.observable_widths(), weight=self.config.get("weight", data.DEFAULT_RECEIVER_WEIGHT)
+                    ),
                 )
             )
 
     def deregister(self) -> None:
         if self.conductor:
-            logger.info(f'{self} deregistering')
-            messaging.publish_soon(messaging.Message(self.conductor, 'deregister', self.payload()))
+            logger.info(f"{self} deregistering")
+            messaging.publish_soon(messaging.Message(self.conductor, "deregister", self.payload()))
             task = util.schedule(self.stop())
             task.add_done_callback(self.deregistered)
 
@@ -159,7 +155,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if self.registered:
             horizon = util.now() - datetime.timedelta(seconds=60)
             if self.last_seen < horizon:
-                logger.warning(f'controller {self.conductor} may be dead. {self.last_seen}')
+                logger.warning(f"controller {self.conductor} may be dead. {self.last_seen}")
                 self.deregister()
         if not self.is_running():
             util.schedule(self.maybe_stop())
@@ -177,15 +173,15 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
 
     async def listen(self, frequencies: list[int]) -> None:
         if self.is_running() and set(frequencies) == set(self.frequencies):
-            self.logger.info(f'already listening to {frequencies}')
+            self.logger.info(f"already listening to {frequencies}")
             self.publish_listening()
             return
-        self.logger.info(f'switching to {frequencies} from {self.frequencies}')
+        self.logger.info(f"switching to {frequencies} from {self.frequencies}")
         await self.stop()
         self.frequencies = frequencies
         self.channel = self.observing_channel_for(frequencies)
         if frequencies:
-            self.logger.info(f'switched to {frequencies}')
+            self.logger.info(f"switched to {frequencies}")
             _state = None
             try:
                 await asyncio.sleep(0)
@@ -194,16 +190,16 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
                         _state = state
                         await asyncio.sleep(0)
             finally:
-                if _state and _state != 'done':
-                    self.logger.debug(f'{self.name} finished listening lifecycle with {_state}')
+                if _state and _state != "done":
+                    self.logger.debug(f"{self.name} finished listening lifecycle with {_state}")
                 self.clear()
                 await asyncio.sleep(0)
         else:
-            self.logger.debug('empty frequency list, not starting new processes.')
+            self.logger.debug("empty frequency list, not starting new processes.")
             self.publish_listening()
 
     def publish_listening(self) -> None:
-        messaging.publish_soon(messaging.Message(self.target, 'listening', self.payload(frequencies=self.frequencies)))
+        messaging.publish_soon(messaging.Message(self.target, "listening", self.payload(frequencies=self.frequencies)))
 
     async def stop(self) -> None:
         pass
@@ -213,20 +209,20 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         yield None  # mypy gets confused without this.
 
     def clear(self) -> None:
-        logger.info(f'{self} clearing frequencies')
+        logger.info(f"{self} clearing frequencies")
         self.frequencies = []
         self.channel = self.observing_channel_for([])
         self.publish_listening()
 
     def __str__(self) -> str:
-        return f'({self.__class__.__name__}) {self.name} on {self.frequencies}'
+        return f"({self.__class__.__name__}) {self.name} on {self.frequencies}"
 
     def describe(self) -> str:
         if self.frequencies:
-            middle = f' @{(min(self.frequencies) + max(self.frequencies)) / 2.0}'
+            middle = f" @{(min(self.frequencies) + max(self.frequencies)) / 2.0}"
         else:
-            middle = ''
-        return f'{self.name} via {self.describe_components()} on {len(self.frequencies)} freqs{middle}'
+            middle = ""
+        return f"{self.name} via {self.describe_components()} on {len(self.frequencies)} freqs{middle}"
 
     def describe_components(self) -> list[str]:
         return []
@@ -239,7 +235,7 @@ class Web888Receiver(LocalReceiver):
         super().__init__(name, config)
 
     def observable_widths(self) -> list[int]:
-        return [int(self.config.get('channel_width', 12000))]
+        return [int(self.config.get("channel_width", 12000))]
 
 
 class DummyReceiver(Web888Receiver):
@@ -248,13 +244,13 @@ class DummyReceiver(Web888Receiver):
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.DummyClient(self.name, self.config.get('client', {}))
+            self.client = iqsources.DummyClient(self.name, self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.DummyDecoder(self.name, self.config.get('decoder', {}), self.listener)
+            self.decoder = decoders.DummyDecoder(self.name, self.config.get("decoder", {}), self.listener)
 
     async def run(self) -> AsyncGenerator:
         self.publish_listening()
-        yield process.CommandState('done')
+        yield process.CommandState("done")
 
 
 class Web888ExecReceiver(Web888Receiver):
@@ -265,29 +261,28 @@ class Web888ExecReceiver(Web888Receiver):
     def setup_harnesses(self) -> None:
         if not self.client:
             self.client = iqsources.KiwiClientProcess(
-                self.name, self.config.get('client', {}), int(self.config.get('channel_width', 12000))
+                self.name, self.config.get("client", {}), int(self.config.get("channel_width", 12000))
             )
         if not self.decoder:
-            self.decoder = decoders.IQDecoderProcess(self.name, self.config.get('decoder', {}), self.listener)
+            self.decoder = decoders.IQDecoderProcess(self.name, self.config.get("decoder", {}), self.listener)
 
     def is_running(self) -> bool:
-        return (
-            (self.client is not None and self.client.is_running())
-            or (self.decoder is not None and self.decoder.is_running())
+        return (self.client is not None and self.client.is_running()) or (
+            self.decoder is not None and self.decoder.is_running()
         )
 
     async def run(self) -> AsyncGenerator:
         self.publish_listening()
         if not self.channel:
-            logger.debug(f'{self} channel was empty')
+            logger.debug(f"{self} channel was empty")
             return
-        await asyncio.sleep(random.randrange(1, 40) / 20.0)   # thundering herd dispersal
+        await asyncio.sleep(random.randrange(1, 40) / 20.0)  # thundering herd dispersal
         if self.client is None:
-            raise ValueError('client not set up. This should not be reached')
+            raise ValueError("client not set up. This should not be reached")
         if self.decoder is None:
-            raise ValueError('decoder not set up. This should not be reached')
+            raise ValueError("decoder not set up. This should not be reached")
 
-        yield None   # FIXME
+        yield None  # FIXME
 
         channel = self.channel
         client: iqsources.KiwiClientProcess = self.client
@@ -310,7 +305,7 @@ class Web888ExecReceiver(Web888Receiver):
             # states until we can start the decoder.
             async for client_state in client_run:
                 match client_state.event:
-                    case 'running':
+                    case "running":
                         decoder_run = decoder.listen(channel)
                         break
             await asyncio.sleep(0)  # should exit from running agen to allow it to be exhausted?
@@ -322,10 +317,10 @@ class Web888ExecReceiver(Web888Receiver):
             try:
                 client_result, decoder_result = await asyncio.gather(*awaitables, return_exceptions=True)
                 if isinstance(client_result, Exception) and decoder.is_running():
-                    logger.warning(f'{self} client encountered an error', exc_info=client_result)
+                    logger.warning(f"{self} client encountered an error", exc_info=client_result)
                     await decoder.stop()
                 if isinstance(decoder_result, Exception) and client.is_running():
-                    logger.warning(f'{self} decoder encountered an error', exc_info=decoder_result)
+                    logger.warning(f"{self} decoder encountered an error", exc_info=decoder_result)
                     await client.stop()
             except asyncio.CancelledError:
                 if decoder.is_running():
@@ -333,11 +328,11 @@ class Web888ExecReceiver(Web888Receiver):
                 if client.is_running():
                     await client.stop()
             except Exception as err:
-                logger.error(f'{self} encountered an error', exc_info=err)
+                logger.error(f"{self} encountered an error", exc_info=err)
 
     async def stop(self) -> None:
         if (self.decoder or self.client) and self.frequencies:
-            self.logger.info(f'Stopping {self}')
+            self.logger.info(f"Stopping {self}")
         client = self.client
         decoder = self.decoder
         if decoder is not None:
@@ -346,13 +341,12 @@ class Web888ExecReceiver(Web888Receiver):
             await client.stop()
 
     def clear(self) -> None:
-        if (
-            (self.client is None or not self.client.is_running())
-            and (self.decoder is None or not self.decoder.is_running())
+        if (self.client is None or not self.client.is_running()) and (
+            self.decoder is None or not self.decoder.is_running()
         ):
             super().clear()
         else:
-            logger.info(f'{self.name} still has running process, not clearing')
+            logger.info(f"{self.name} still has running process, not clearing")
 
     def describe_components(self) -> list[str]:
         out = []
@@ -382,11 +376,11 @@ class Web888PipeReceiver(Web888Receiver):
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.KiwiClient(self.name, self.config.get('client', {}))
+            self.client = iqsources.KiwiClient(self.name, self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.IQDecoder(self.name, self.config.get('decoder', {}), self.listener)
+            self.decoder = decoders.IQDecoder(self.name, self.config.get("decoder", {}), self.listener)
         if not self.receiver_pipe:
-            self.receiver_pipe = ReceiverPipe(self.client.commandline() + ['|'] + self.decoder.commandline())
+            self.receiver_pipe = ReceiverPipe(self.client.commandline() + ["|"] + self.decoder.commandline())
 
     async def run(self) -> AsyncGenerator:
         if self.receiver_pipe is not None:
@@ -396,7 +390,7 @@ class Web888PipeReceiver(Web888Receiver):
                 await asyncio.sleep(0)
 
     async def stop(self) -> None:
-        self.logger.debug('Stopping')
+        self.logger.debug("Stopping")
         if self.receiver_pipe is not None:
             await self.receiver_pipe.stop()
 
@@ -407,35 +401,35 @@ class DirectReceiver(LocalReceiver):
 
     def setup_harnesses(self) -> None:
         if not self.decoder:
-            decoder_type = self.config['decoder']['type']
+            decoder_type = self.config["decoder"]["type"]
             decoder_class = getattr(decoders, decoder_type)
-            self.decoder = decoder_class(self.name, self.config.get('decoder', {}), self.listener)
+            self.decoder = decoder_class(self.name, self.config.get("decoder", {}), self.listener)
             if not isinstance(self.decoder, decoders.DirectDecoder):
-                raise ValueError(f'{self.decoder} is not an expected Decoder')
+                raise ValueError(f"{self.decoder} is not an expected Decoder")
             self.observable_channel_widths = self.decoder.observable_channel_widths()
-            logger.debug(f'{self.name} observable channel widths {self.observable_channel_widths}')
+            logger.debug(f"{self.name} observable channel widths {self.observable_channel_widths}")
 
     def is_running(self) -> bool:
         return self.decoder is not None and self.decoder.is_running()
 
     async def run(self) -> AsyncGenerator:
         if self.decoder is None:
-            logger.info(f'{self} has no decoder')
+            logger.info(f"{self} has no decoder")
             return
         self.publish_listening()
-        await asyncio.sleep(random.randrange(1, 20) / 10.0)   # thundering herd dispersal
+        await asyncio.sleep(random.randrange(1, 20) / 10.0)  # thundering herd dispersal
         try:
             async with util.aclosing(self.decoder.listen(self.channel)) as lifecycle:
                 async for state in lifecycle:
-                    logger.debug(f'{self} reached state {state.event}')
+                    logger.debug(f"{self} reached state {state.event}")
                     yield state
         except asyncio.CancelledError:
-            logger.debug(f'{self} cancelled')
+            logger.debug(f"{self} cancelled")
         except Exception:  # as err:
-            logger.info(f'{self} encountered an error')  # , exc_info=err)
+            logger.info(f"{self} encountered an error")  # , exc_info=err)
 
     async def stop(self) -> None:
-        self.logger.debug('Stopping')
+        self.logger.debug("Stopping")
         if self.decoder is not None:
             await self.decoder.stop()
 
@@ -443,11 +437,11 @@ class DirectReceiver(LocalReceiver):
         return self.observable_channel_widths
 
     def clear(self) -> None:
-        if (self.decoder is None or not self.decoder.is_running()):
-            logger.debug(f'{self.name} has no running process {self.decoder}, clearing.')
+        if self.decoder is None or not self.decoder.is_running():
+            logger.debug(f"{self.name} has no running process {self.decoder}, clearing.")
             super().clear()
         else:
-            logger.debug(f'{self.name} still has running a process, not clearing')
+            logger.debug(f"{self.name} still has running a process, not clearing")
 
     def describe_components(self) -> list[str]:
         if self.decoder:
@@ -455,7 +449,7 @@ class DirectReceiver(LocalReceiver):
         return []
 
 
-class ReceiverNode():
+class ReceiverNode:
     local_receivers: list[LocalReceiver]
 
     def __init__(self, config: collections.abc.Mapping) -> None:
@@ -463,15 +457,15 @@ class ReceiverNode():
         self.local_receivers = []
 
     def build_local_receiver(self, receiver_config: MutableMapping) -> LocalReceiver:
-        typename = receiver_config['type']
+        typename = receiver_config["type"]
         klass = globals()[typename]
-        receiver: LocalReceiver = klass(receiver_config['name'], receiver_config)
-        receiver.watch_event('fatal', self.on_fatal_error)
+        receiver: LocalReceiver = klass(receiver_config["name"], receiver_config)
+        receiver.watch_event("fatal", self.on_fatal_error)
         self.local_receivers.append(receiver)
         return receiver
 
     def start(self) -> None:
-        logger.debug(f'starting {len(self.local_receivers)} local receivers')
+        logger.debug(f"starting {len(self.local_receivers)} local receivers")
         for receiver in self.local_receivers:
             receiver.on_observer_start()
 
@@ -480,7 +474,7 @@ class ReceiverNode():
         return outstanding
 
     async def stop(self) -> None:
-        logger.debug(f'{self} stopped')
+        logger.debug(f"{self} stopped")
         await asyncio.gather(*self.outstanding_awaitables(), return_exceptions=True)
 
     def on_fatal_error(self, _: Any) -> None:

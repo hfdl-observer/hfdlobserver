@@ -6,10 +6,9 @@
 #
 import pathlib
 import sys
-import yaml
 
 import requests
-
+import yaml
 from whiptail import Whiptail
 
 
@@ -20,20 +19,20 @@ def default_path(base, *keys):
         d = base[car] = {}
     if cdr:
         return default_path(d, *cdr)
-    assert d is not None, f'{keys} ... {base}'
+    assert d is not None, f"{keys} ... {base}"
     return d
 
 
-active = requests.get('https://hfdl.observer/active.json').json()
+active = requests.get("https://hfdl.observer/active.json").json()
 
-ids = sorted(s['id'] for s in active['ground_stations'])
+ids = sorted(s["id"] for s in active["ground_stations"])
 stations = {x: None for x in ids}
-for station in active['ground_stations']:
-    stations[station['id']] = station['name']
+for station in active["ground_stations"]:
+    stations[station["id"]] = station["name"]
 
-settings = yaml.safe_load(pathlib.Path('settings.yaml.base').read_text())
+settings = yaml.safe_load(pathlib.Path("settings.yaml.base").read_text())
 
-w = Whiptail('Configure HFDL Observer', backtitle='A multi-headed dumphfdl receiver')
+w = Whiptail("Configure HFDL Observer", backtitle="A multi-headed dumphfdl receiver")
 
 w.msgbox("""Welcome to HFDL Observer. Let's set up a simple configuration.
 
@@ -47,25 +46,26 @@ if choice[1] == 1:
     sys.exit()
 
 station_list = []
-if choice[0] == 'Enter a list of IDs':
-    entered = ''
-    error = ''
+if choice[0] == "Enter a list of IDs":
+    entered = ""
+    error = ""
     while True:
         w.msgbox(
-            f"{error}The currently known stations are:\n" +
-            "\n".join(f"{k} - {v}" for k, v in stations.items()) +
-            "\n\nEnter the list on the next page.")
-        entered, code = w.inputbox('Enter the comma-separated list of Stations IDs', entered)
+            f"{error}The currently known stations are:\n"
+            + "\n".join(f"{k} - {v}" for k, v in stations.items())
+            + "\n\nEnter the list on the next page."
+        )
+        entered, code = w.inputbox("Enter the comma-separated list of Stations IDs", entered)
         if code == 1:
             sys.exit()
         try:
-            station_list = [int(x) for x in entered.split(',')]
+            station_list = [int(x) for x in entered.split(",")]
         except Exception:
-            error = 'There was something wrong with the list you entered. Use comma separated numbers.\n'
+            error = "There was something wrong with the list you entered. Use comma separated numbers.\n"
         else:
             if all(x in stations for x in station_list):
                 break
-            error = 'One or more station IDs are invalid.\n'
+            error = "One or more station IDs are invalid.\n"
 else:
     lat = None
     long = None
@@ -88,22 +88,23 @@ else:
         except Exception:
             pass
     import extras.guess_station_ranking as gss
+
     station_list = list(d[1] for d in gss.guess(lat, long))
 
-default_path(settings, 'observer', 'conductor')['ranked_stations'] = station_list
+default_path(settings, "observer", "conductor")["ranked_stations"] = station_list
 
 entered, code = w.inputbox("[Optional] If you want to log packets locally, input a writeable directory here.")
 if code == 1:
     sys.exit()
 if entered:
-    entered = entered.rstrip('/')
-    default_path(settings, 'receivers', 'web888', 'decoder')['packetlog'] = entered
+    entered = entered.rstrip("/")
+    default_path(settings, "receivers", "web888", "decoder")["packetlog"] = entered
 
 entered, code = w.inputbox("[Optional] Enter your Airframes.io station ID")
 if code == 1:
     sys.exit()
 if entered:
-    default_path(settings, 'dumphfdl', 'default')['station_id'] = entered
+    default_path(settings, "dumphfdl", "default")["station_id"] = entered
 
 
 code = w.yesno("""
@@ -111,35 +112,36 @@ code = w.yesno("""
 """)
 
 if code:
-    default_path(settings, 'observer', 'tracker')['station_updates'] = [{
-        'url': 'https://hfdl.observer/active.json',
-        'period': 61
-    }]
+    default_path(settings, "observer", "tracker")["station_updates"] = [
+        {"url": "https://hfdl.observer/active.json", "period": 61}
+    ]
 
-entered = ''
+entered = ""
 while True:
     entered, code = w.inputbox("[REQUIRED] Enter the <address>:<port> of the Web-888 device")
     if code == 1:
         sys.exit()
     try:
-        address, port = entered.split(':')
+        address, port = entered.split(":")
         port = int(port)
     except Exception:
         w.msgbox("Please use the format <address>:<port>. Example: 'my.web888.example:1234'")
     else:
-        default_path(settings, 'receivers', 'web888', 'client').update({
-            'address': address,
-            'port': port,
-        })
+        default_path(settings, "receivers", "web888", "client").update(
+            {
+                "address": address,
+                "port": port,
+            }
+        )
         break
 
-out = pathlib.Path('settings.yaml')
-extra = ''
+out = pathlib.Path("settings.yaml")
+extra = ""
 if out.exists():
-    out = pathlib.Path('settings.yaml.new')
-    extra = '\n\nYou should merge this with your existing settings.yaml file before running.'
+    out = pathlib.Path("settings.yaml.new")
+    extra = "\n\nYou should merge this with your existing settings.yaml file before running."
 else:
-    extra = '\n\nYour HFDL Observer installation is configured for running via `hfdlobserver.sh`'
+    extra = "\n\nYour HFDL Observer installation is configured for running via `hfdlobserver.sh`"
 
 out.write_text(yaml.safe_dump(settings, default_flow_style=False))
 

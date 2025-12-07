@@ -10,14 +10,12 @@ import collections
 import functools
 import json
 import logging
-
 from typing import Any, Callable, Union
 
 import hfdl_observer.bus
 import hfdl_observer.data
 import hfdl_observer.hfdl
 import hfdl_observer.util as util
-
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +54,7 @@ class UDPProtocol(asyncio.protocols.BaseProtocol):
     consumers: list[HFDLPacketConsumer]
 
     def __init__(self, hfdl_consumers: list[HFDLPacketConsumer]):
-        self.buffers: dict = collections.defaultdict(lambda: '')
+        self.buffers: dict = collections.defaultdict(lambda: "")
         self.consumers = hfdl_consumers
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -68,11 +66,11 @@ class UDPProtocol(asyncio.protocols.BaseProtocol):
     def datagram_received(self, data: bytearray, addr: Any) -> None:
         message = data.decode()
         self.buffers[addr] += message
-        *head, tail = self.buffers[addr].split('\n')
+        *head, tail = self.buffers[addr].split("\n")
 
         for line in head:
             line = line.strip()
-            if not line.startswith('{'):
+            if not line.startswith("{"):
                 logger.debug(f"dropping garbage: {line}")
                 continue
             try:
@@ -98,10 +96,10 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
         self.settings = settings
 
     async def run(self, hfdl_consumers: list[HFDLPacketConsumer]) -> None:
-        logger.debug('running HFDL UDP listener')
+        logger.debug("running HFDL UDP listener")
         self.transport, self.protocol = await asyncio.get_running_loop().create_datagram_endpoint(
             lambda: UDPProtocol(hfdl_consumers),
-            local_addr=(self.settings['address'], self.settings['port']),
+            local_addr=(self.settings["address"], self.settings["port"]),
         )
         try:
             while self.running and not util.is_shutting_down():
@@ -111,14 +109,14 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
                 self.transport.close()
             except RuntimeError:
                 pass
-        logger.debug('HFDL UDP listener done')
+        logger.debug("HFDL UDP listener done")
 
     def start(self, hfdl_consumers: list[HFDLPacketConsumer]) -> None:
         try:
-            self.settings['address']
-            self.settings['port']
+            self.settings["address"]
+            self.settings["port"]
         except KeyError:
-            logger.warn('Missing HFDL Listener configuration, not starting one.')
+            logger.warn("Missing HFDL Listener configuration, not starting one.")
         else:
             self.running = True
             util.schedule(self.run(hfdl_consumers))
@@ -131,26 +129,27 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
     @property
     def listener(self) -> hfdl_observer.data.ListenerConfig:
         config = hfdl_observer.data.ListenerConfig()
-        config.proto = 'udp'  # all that is supported
-        config.address = self.settings['address']
-        config.port = self.settings['port']
+        config.proto = "udp"  # all that is supported
+        config.address = self.settings["address"]
+        config.port = self.settings["port"]
         return config
 
     @functools.cached_property
     def connection_info(self) -> dict:
-        address = self.settings['address']
-        if address == '0.0.0.0' or address == '*':
-            address = self.settings.get('advertised_address', None)
+        address = self.settings["address"]
+        if address == "0.0.0.0" or address == "*":
+            address = self.settings.get("advertised_address", None)
             if not address:
-                logger.warning('attempting to discover a visible IP address. This may explode.')
+                logger.warning("attempting to discover a visible IP address. This may explode.")
                 import socket
+
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect(("254.254.254.254", 80))  # this address is in an unroutable and unusable space.
                 address = s.getsockname()[0]
                 s.close()
-                logger.warning(f'found {address}. Setting advertised_address is preferred.')
+                logger.warning(f"found {address}. Setting advertised_address is preferred.")
         return {
-            'protocol': 'udp',
-            'address': address,
-            'port': self.settings['port'],
+            "protocol": "udp",
+            "address": address,
+            "port": self.settings["port"],
         }

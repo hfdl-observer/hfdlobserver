@@ -2,7 +2,6 @@ import asyncio
 import functools
 import logging
 import weakref
-
 from typing import Callable
 
 import hfdl_observer.util as util
@@ -40,30 +39,30 @@ class RemoteBroker:
             # with no config, this becomes a dummy
             self.configured = False
             return
-        self.host = config.get('host', 'localhost')
-        self.pub_port = config.get('pub_port', 5559)
-        self.sub_port = config.get('sub_port', 5560)
+        self.host = config.get("host", "localhost")
+        self.pub_port = config.get("pub_port", 5559)
+        self.sub_port = config.get("sub_port", 5560)
         self.context = zero.get_thread_context()
         self._publisher = self.publisher()
         self.configured = True
 
     def subscriber(self, target: str) -> RemoteSubscriber:
-        url = f'tcp://{self.host}:{self.sub_port}'
-        logger.debug(f'subscriber {url}/{target}')
+        url = f"tcp://{self.host}:{self.sub_port}"
+        logger.debug(f"subscriber {url}/{target}")
         return RemoteSubscriber(url, target, context=self.context)
 
     def publisher(self) -> RemotePublisher:
-        logger.debug(f'publisher {self.host}:{self.pub_port}')
+        logger.debug(f"publisher {self.host}:{self.pub_port}")
         return RemotePublisher(self.host, self.pub_port, context=self.context)
 
     async def publish(self, message: Message) -> None:
-        if not hasattr(self, '_publisher'):  # race condition if we're asked to publish before we're initialized.
+        if not hasattr(self, "_publisher"):  # race condition if we're asked to publish before we're initialized.
             return None
         try:
-            logger.debug(f'queuing {message}')
+            logger.debug(f"queuing {message}")
             await self._publisher.publish(message)
         except AttributeError:
-            logger.debug(f'dropping {message}')
+            logger.debug(f"dropping {message}")
         return None
 
 
@@ -78,12 +77,12 @@ class GenericSubscriber(AbstractSubscriber):
         self.get_message_handler = functools.cache(self.get_message_handler)  # type: ignore[method-assign]
 
     def get_message_handler(self, name: str) -> None | Callable:
-        return getattr(self, f'on_remote_{name.strip()}', None)
+        return getattr(self, f"on_remote_{name.strip()}", None)
 
     def dispatch_message(self, message: Message) -> None:
         handler = self.get_message_handler(message.subject)
         if callable(handler):
-            logger.debug(f'dispatching {message} via {handler}')
+            logger.debug(f"dispatching {message} via {handler}")
             handler(message)
         else:
             pass
@@ -95,7 +94,7 @@ class Subscription:
     subject: str
     subscriber: weakref.ReferenceType[AbstractSubscriber]
 
-    def __init__(self, subscriber: AbstractSubscriber, target: str = '', subject: str = '') -> None:
+    def __init__(self, subscriber: AbstractSubscriber, target: str = "", subject: str = "") -> None:
         self.subscriber = weakref.ref(subscriber)
         self.target = target
         self.subject = subject
@@ -107,9 +106,8 @@ class Subscription:
         return subscriber is not None
 
     def is_subscribed(self, target: str, subject: str) -> bool:
-        return (
-            (self.target == '' or target.startswith(self.target))
-            and (self.subject == '' or subject.startswith(self.subject))
+        return (self.target == "" or target.startswith(self.target)) and (
+            self.subject == "" or subject.startswith(self.subject)
         )
 
 
@@ -123,13 +121,13 @@ class _Broker:
 
     def set_remote_broker(self, remote_broker: RemoteBroker) -> None:
         self.remote_broker = remote_broker
-        self.remote_subscriber = remote_broker.subscriber('')
+        self.remote_subscriber = remote_broker.subscriber("")
         self.remote_subscriber.set_callback(self.receive)
         # TODO start it up. Is this all I need? I don't need an explicit stop since this really should only be called
         # once and persist for the lifetime of the broker, which is a singleton.
         self.remote_subscriber.start()
 
-    def subscribe(self, subscriber: AbstractSubscriber, target: str = '', subject: str = '') -> None:
+    def subscribe(self, subscriber: AbstractSubscriber, target: str = "", subject: str = "") -> None:
         self.subscribers.append(Subscription(subscriber, target, subject))
 
     async def publish_locally(self, message: Message) -> None:
@@ -143,7 +141,7 @@ class _Broker:
             self.subscribers.remove(dead_subscriber)
 
     async def publish(self, message: Message) -> None:
-        logger.debug(f'publish {message.target}|{message.subject}')
+        logger.debug(f"publish {message.target}|{message.subject}")
         await self.publish_locally(message)
         if self.remote_broker is not None:
             await self.remote_broker.publish(message)
@@ -161,7 +159,7 @@ class _Broker:
 _BROKER = _Broker()
 
 
-def subscribe(subscriber: AbstractSubscriber, target: str, subject: str = '') -> None:
+def subscribe(subscriber: AbstractSubscriber, target: str, subject: str = "") -> None:
     _BROKER.subscribe(subscriber, target, subject)
 
 
