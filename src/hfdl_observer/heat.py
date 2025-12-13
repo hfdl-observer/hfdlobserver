@@ -200,7 +200,7 @@ class TableByStation(Table):
         super()._populate(packets, bin_size)
         for k, rh in self.row_headers.items():
             rh.station_id = int(k)
-            rh.label = f"#{k}. {network.STATIONS[k].station_name}"
+            rh.label = f"#{k}. {network.STATIONS.get(k, 'unknown').station_name}"
 
     def key_for_row(self, row_id: int | str) -> Any:
         # we need to sort by station ID. so, indirect lookup
