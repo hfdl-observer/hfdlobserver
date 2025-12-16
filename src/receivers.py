@@ -457,9 +457,12 @@ class ReceiverNode:
         self.local_receivers = []
 
     def build_local_receiver(self, receiver_config: MutableMapping) -> LocalReceiver:
-        typename = receiver_config["type"]
-        klass = globals()[typename]
-        receiver: LocalReceiver = klass(receiver_config["name"], receiver_config)
+        try:
+            typename = receiver_config["type"]
+            klass = globals()[typename]
+            receiver: LocalReceiver = klass(receiver_config["name"], receiver_config)
+        except KeyError:
+            raise ValueError(f"Config for receiver `{receiver_config.get('receiver', '(unknown)')}` is malformed")
         receiver.watch_event("fatal", self.on_fatal_error)
         self.local_receivers.append(receiver)
         return receiver
