@@ -42,7 +42,8 @@ class BaseDecoder:
 
     @property
     def station_id(self) -> Optional[str]:
-        return self.config.get("station_id", None)
+        result: str | None = self.config.get("station_id", None)
+        return result
 
     async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
         raise NotImplementedError()
