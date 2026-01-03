@@ -28,7 +28,7 @@ import hfdl_observer.listeners
 import hfdl_observer.manage as manage
 import hfdl_observer.messaging as messaging
 import hfdl_observer.network as network
-import hfdl_observer.orm as orm
+import hfdl_observer.ormless as orm
 import hfdl_observer.settings
 import hfdl_observer.util as util
 import hfdl_observer.zero as zero
@@ -85,7 +85,6 @@ class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
         self.packet_watcher = orm.PacketWatcher()
         hfdl_observer.data.PACKET_WATCHER = self.packet_watcher
         self.network_overview = manage.NetworkOverview(config["tracker"], network.UPDATER)
-        self.network_overview.watch_event("state", network.UPDATER.prune)
         self.network_overview.watch_event("frequencies", self.on_frequencies)
         self.watch_event("orchestrated", self.maybe_describe_receivers)
 
@@ -117,13 +116,11 @@ class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
         self.running = True
         manage.ConductorNode.start(self)
         receivers.ReceiverNode.start(self)
-        self.packet_watcher.prune_every(60)
         self.network_overview.start()
         self.hfdl_listener.start(self.hfdl_consumers)
 
     def outstanding_awaitables(self) -> list[Awaitable]:
         outstanding: list[Awaitable] = [
-            self.packet_watcher.stop_pruning(),
             self.network_overview.stop(),
         ]
         outstanding.extend(receivers.ReceiverNode.outstanding_awaitables(self))
@@ -227,7 +224,6 @@ def observe(
         with Runner() as runner:
             util.thread_local.loop = runner.get_loop()
             util.thread_local.runner = runner
-            orm.gather_prune_stats = util.tobool(settings.get("show_prune_stats", False))
 
             if as_controller:
                 use_zmq = util.tobool(broker_config.get("enabled", False))
@@ -346,9 +342,9 @@ def command(
             setup_logging(handler, debug, quiet)
             observe(as_controller=not node)
         else:
-            import cui
+            import richui
 
-            cui.screen(handler, debug, quiet)
+            richui.screen(handler, debug, quiet)
     except Exception as exc:
         # will this catch the annoying libzmq assertion failures? nope.
         print(f"exiting due to exception: {exc}")

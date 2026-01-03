@@ -369,6 +369,18 @@ async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     return await loop.run_in_executor(thread_local.db_executor, run)
 
 
+async def in_ui_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
+    # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
+    if not hasattr(thread_local, "ui_executor"):
+        thread_local.ui_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+
+    def run() -> Any:
+        return func(*args, **kwargs)
+
+    return await loop.run_in_executor(thread_local.ui_executor, run)
+
+
 def is_shutting_down() -> bool:
     shutting_down: bool = shutdown_event.is_set()
     return shutting_down

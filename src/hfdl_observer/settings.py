@@ -129,7 +129,7 @@ def load(filepath: Union[str, pathlib.Path]) -> MutableMapping:
                 defaults[parent_key]["local_receivers"], registry, defaults
             )
     _globals = globals()
-    for key in ["observer", "cui", "node", "viewer", "aggregator"]:
+    for key in ["observer", "cui", "node", "viewer", "aggregator", "db"]:
         _globals[key] = chained(key, registry, defaults)
     return registry
 
@@ -298,12 +298,17 @@ defaults: dict[str, Any] = {
             },
         },
     },
+    "db": {
+        "uri": "file:mem1?mode=memory&cache=shared",
+        "horizon": 1,
+    }
 }
 observer: MutableMapping = {}
 cui: MutableMapping = {}
 node: MutableMapping = {}
 viewer: MutableMapping = {}
 aggregator: MutableMapping = {}
+db: MutableMapping = {}
 
 
 def deepchainmap_representer(dumper: yaml.SafeDumper, dcm: util.DeepChainMap) -> yaml.nodes.MappingNode:

@@ -1,7 +1,5 @@
 click
 numpy
-pony; python_version < '3.13'
-pony @ git+https://github.com/black-sliver/pony@feat/py313 ; python_version >= '3.13'
 pyyaml
 requests
 rich

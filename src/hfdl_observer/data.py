@@ -190,6 +190,9 @@ class AbstractPacketWatcher:
     async def packets_by_receiver(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
         raise NotImplementedError(str(self.__class__))
 
+    async def count_packets_since(self, since: datetime.timedelta) -> int | None:
+        raise NotImplementedError(str(self.__class__))
+
 
 PACKET_WATCHER = AbstractPacketWatcher()  # Must be overridden during app initialization
 
