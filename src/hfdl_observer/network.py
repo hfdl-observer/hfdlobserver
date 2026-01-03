@@ -289,9 +289,6 @@ class AbstractNetworkUpdater(bus.EventNotifier):
             STATIONS.update(hfdl_stations)
             await self.updated()
 
-    def prune(self, _: Any = None) -> None:
-        pass
-
 
 class CumulativePacketStats(bus.EventNotifier):
     packets: int = 0
