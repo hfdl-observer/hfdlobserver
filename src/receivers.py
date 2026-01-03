@@ -295,7 +295,7 @@ class Web888ExecReceiver(Web888Receiver):
                 if lifecycle is not None:
                     await asyncio.sleep(0)
                     async with util.aclosing(lifecycle):
-                        async for state in lifecycle:
+                        async for _state in lifecycle:
                             await asyncio.sleep(0)
                     await other.stop()
 

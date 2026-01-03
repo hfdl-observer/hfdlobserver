@@ -110,11 +110,11 @@ class Dumphfdl(BaseDecoder):
             )
 
         # add any other configured outputs, such as for acarshub
-        for out in self.config.get("output", None) or []:
+        for o in self.config.get("output", None) or []:
             cmd.extend(
                 [
                     "--output",
-                    f"decoded:{out.get('format', 'json')}:{out['protocol']}:address={out['address']},port={out['port']}",
+                    f"decoded:{o.get('format', 'json')}:{o['protocol']}:address={o['address']},port={o['port']}",
                 ]
             )
 

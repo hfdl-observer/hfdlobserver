@@ -65,9 +65,7 @@ class AbstractHeatMapFormatter(Generic[TableSourceT]):
     def max_count(self) -> int:
         if not self.source.bins:
             return 0
-        return max(
-            max(c.value if c else 0 for c in row or [heat.Cell(0)]) for row in self.source.bins.values()
-        )
+        return max(max(c.value if c else 0 for c in row or [heat.Cell(0)]) for row in self.source.bins.values())
 
     @functools.cached_property
     def column_size(self) -> int:

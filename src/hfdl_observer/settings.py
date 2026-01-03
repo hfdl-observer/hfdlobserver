@@ -54,7 +54,7 @@ def dereference_dumphfdl(dumphfdl: MutableMapping, *configs: MutableMapping) -> 
             resolved_outputs.append(output)
         else:
             complex_outputs.setdefault(key, []).append(output)
-    for k, mappings in complex_outputs.items():
+    for mappings in complex_outputs.values():
         chained = util.DeepChainMap(*mappings) if len(mappings) > 1 else mappings[0]
         resolved_outputs.append(dereference_output(chained, *configs))
     outputs = {"output": resolved_outputs}
@@ -301,7 +301,7 @@ defaults: dict[str, Any] = {
     "db": {
         "uri": "file:mem1?mode=memory&cache=shared",
         "horizon": 1,
-    }
+    },
 }
 observer: MutableMapping = {}
 cui: MutableMapping = {}

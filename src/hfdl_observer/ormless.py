@@ -62,7 +62,7 @@ class Table:
     @classmethod
     def factory(cls, cursor: sqlite3.Cursor, row: Sequence) -> Table:
         fields = [column[0] for column in cursor.description]
-        data = {k.strip('_'): v for k, v in zip(fields, row)}
+        data = {k.strip("_"): v for k, v in zip(fields, row)}
         cls.preprocess_data(data)
         return cls(**data)
 
@@ -91,7 +91,7 @@ class StationAvailability(Table):
 
     @classmethod
     def preprocess_data(cls, data: dict) -> None:
-        data["frequencies"] = [int(f) for f in data["frequencies"].split(',') if f != '']
+        data["frequencies"] = [int(f) for f in data["frequencies"].split(",") if f != ""]
 
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
@@ -143,7 +143,7 @@ class StationAvailability(Table):
                 base.agent,
                 base.from_station,
                 base.valid_at_frame,
-                base.valid_to_frame
+                base.valid_to_frame,
             )
             conn.execute(sql, data)
         # updates?

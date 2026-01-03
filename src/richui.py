@@ -278,8 +278,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
 def map_style(style: str) -> rich.style.Style | None:
     if not style:
         return None
-    if style.startswith('rgb('):
-        rgb = tuple(int(x) for x in style[4:-1].split(','))
+    if style.startswith("rgb("):
+        rgb = tuple(int(x) for x in style[4:-1].split(","))
         return rich.style.Style(bgcolor=f"rgb({','.join(str(i) for i in rgb)})", color="black")
     return STYLES[style]
 
