@@ -10,9 +10,10 @@ import datetime
 import functools
 import logging
 
-from typing import Any, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar
 
 import hfdlobserver
+import hfdl_observer.data as data
 import hfdl_observer.heat as heat
 import hfdl_observer.hfdl as hfdl
 import hfdl_observer.manage as manage
@@ -27,7 +28,8 @@ MAP_REFRESH_PERIOD = 32.0 / 19.0  # every HFDL slot
 MAP_REFRESH_DELTA = datetime.timedelta(seconds=MAP_REFRESH_PERIOD)
 
 
-TableSourceT = TypeVar("TableSourceT", bound="heat.Table")
+TableSourceT = TypeVar("TableSourceT", bound=heat.Table)
+TableKeyT = TypeVar("TableKeyT")  # , bound=data.BinnedPacketKeyType)
 CellText = tuple[str | None, str | None]
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ class HeatMapConsumer:
         raise NotImplementedError()
 
 
-class AbstractHeatMapFormatter(Generic[TableSourceT]):
+class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
     source: TableSourceT
     flexible_width: bool = True
     title: str
@@ -125,7 +127,7 @@ class AbstractHeatMapFormatter(Generic[TableSourceT]):
             text = stroke or "·"
         return (f"{text: ^{self.column_size}}", style)
 
-    def row(self, row_id: Union[str, int], row_data: Sequence[heat.Cell], width: int) -> list[CellText]:
+    def row(self, row_id: TableKeyT, row_data: Sequence[heat.Cell], width: int) -> list[CellText]:
         row_header = self.source.row_headers[row_id]
         cells = [self.row_header(row_header, row_data)]
         cells.extend(self.cell(ix, cell, row_header) for ix, cell in enumerate(row_data))
@@ -133,11 +135,11 @@ class AbstractHeatMapFormatter(Generic[TableSourceT]):
         cells.append(self.cumulative(row_data, remainder))
         return cells
 
-    def rows(self) -> Iterable[tuple[Union[int, str], Sequence[heat.Cell]]]:
+    def rows(self) -> Iterable[tuple[TableKeyT, Sequence[heat.Cell]]]:
         return list(row for row in self.source)
 
 
-class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequency]):
+class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequencyStation, tuple[int, int]]):
     title = "by frequency"
 
     def __init__(
@@ -165,17 +167,17 @@ class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequency
         self.num_bins = num_bins
 
     async def fetch(self) -> None:
-        def rowheader_factory(key: Union[int, str], tags: Sequence[str]) -> heat.RowHeader:
-            return heat.RowHeader(str(key), station_id=network.STATIONS[key].station_id, tags=tags)
+        def rowheader_factory(key: tuple[int, int], tags: Sequence[str]) -> heat.RowHeader:
+            return heat.RowHeader(str(key), station_id=key[1], tags=tags)
 
-        self.source = heat.TableByFrequency()
+        self.source = heat.TableByFrequencyStation()
         await self.source.populate(self.bin_size, self.num_bins)
 
-        self.source.tag_rows(self.targetted, ["targetted"], default_factory=rowheader_factory)
-        self.source.tag_rows(self.untargetted, ["untargetted"], default_factory=rowheader_factory)
+        self.source.tag_frequencies(self.targetted, ["targetted"], default_factory=rowheader_factory)
+        self.source.tag_frequencies(self.untargetted, ["untargetted"], default_factory=rowheader_factory)
 
         current_freqs = await network.UPDATER.current_freqs()
-        self.source.tag_rows(
+        self.source.tag_frequencies(
             current_freqs, ["active"], default_factory=rowheader_factory if self.show_all_active else None
         )
         await self.source.fill_active_state()
@@ -209,7 +211,7 @@ class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequency
                 stratum = "○"
         return (f"{symbol}{infix: >9}{header.label: >6} {stratum} ", style)
 
-    def row(self, row_id: Union[str, int], row_data: Sequence[heat.Cell], width: int) -> list[CellText]:
+    def row(self, row_id: tuple[int, int], row_data: Sequence[heat.Cell], width: int) -> list[CellText]:
         if (
             self.show_quiet
             or (self.show_all_active and self.source.row_headers[row_id].is_tagged("active"))
@@ -236,7 +238,7 @@ class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequency
         return (text, style)
 
 
-class HeatMapByBandFormatter(AbstractHeatMapFormatter[heat.TableByBand]):
+class HeatMapByBandFormatter(AbstractHeatMapFormatter[heat.TableByBand, int]):
     title = "by MHz band"
 
     def __init__(
@@ -255,7 +257,7 @@ class HeatMapByBandFormatter(AbstractHeatMapFormatter[heat.TableByBand]):
         self.source = heat.TableByBand()
         await self.source.populate(self.bin_size, self.num_bins)
 
-        def rowheader_factory(key: Union[int, str], tags: Sequence[str]) -> heat.RowHeader:
+        def rowheader_factory(key: int, tags: Sequence[str]) -> heat.RowHeader:
             return heat.RowHeader(str(key), tags=tags)
 
         if self.all_bands:
@@ -272,7 +274,7 @@ class HeatMapByBandFormatter(AbstractHeatMapFormatter[heat.TableByBand]):
         return (f" {header.label: >13} MHz ", style)
 
 
-class HeatMapByStationFormatter(AbstractHeatMapFormatter[heat.TableByStation]):
+class HeatMapByStationFormatter(AbstractHeatMapFormatter[heat.TableByStation, str]):
     title = "by ground station"
 
     def __init__(
@@ -297,7 +299,7 @@ class HeatMapByStationFormatter(AbstractHeatMapFormatter[heat.TableByStation]):
         return (f" {header.label.split(',', 1)[0].strip()[:ROW_HEADER_WIDTH]: >{ROW_HEADER_WIDTH}} ", style)
 
 
-class HeatMapByAgentFormatter(AbstractHeatMapFormatter[heat.TableByAgent]):
+class HeatMapByAgentFormatter(AbstractHeatMapFormatter[heat.TableByAgent, str]):
     title = "by agent"
 
     def __init__(
@@ -322,7 +324,7 @@ class HeatMapByAgentFormatter(AbstractHeatMapFormatter[heat.TableByAgent]):
         return (f" {header.label: >{ROW_HEADER_WIDTH}} ", style)
 
 
-class HeatMapByReceiverFormatter(AbstractHeatMapFormatter[heat.TableByReceiver]):
+class HeatMapByReceiverFormatter(AbstractHeatMapFormatter[heat.TableByReceiver, str]):
     title = "by receiver"
 
     def __init__(
@@ -354,7 +356,7 @@ class HeatMap:
     config: dict
     last_render_time: datetime.datetime = util.now()
     bin_size: int = 60
-    data_source: Callable[[int], Coroutine[Any, Any, AbstractHeatMapFormatter[Any]]]
+    data_source: Callable[[int], Coroutine[Any, Any, AbstractHeatMapFormatter[Any, Any]]]
     display: HeatMapConsumer
     refresh_period = 64  # two frames.
     task: Optional[asyncio.Task] = None

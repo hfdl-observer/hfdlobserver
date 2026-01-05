@@ -142,7 +142,7 @@ class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
         util.schedule(self.aministats())
 
     async def aministats(self) -> None:
-        table = hfdl_observer.heat.TableByFrequency()
+        table = hfdl_observer.heat.TableByFrequencyStation()
         await table.populate(60, 10)
         for line in str(table).split("\n"):
             logger.info(f"{line}")

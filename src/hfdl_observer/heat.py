@@ -6,13 +6,16 @@
 
 import datetime
 import logging
-from typing import Any, Callable, Iterable, Iterator, Mapping, Optional, Sequence
+from typing import Any, Callable, Generic, Iterable, Iterator, Mapping, Optional, Sequence, TypeVar
 
 import hfdl_observer.data as data
 import hfdl_observer.network as network
 import hfdl_observer.util as util
 
 logger = logging.getLogger(__name__)
+
+
+TableKeyT = TypeVar("TableKeyT")
 
 
 class Taggable:
@@ -81,22 +84,19 @@ class Cell(Taggable):
         return f"{self.value}{self.tags_as_str()}"
 
 
-DataRows = dict[int | str, Sequence[Cell]]
-
-
-class Table:
+class Table(Generic[TableKeyT]):
     column_headers: Sequence[ColumnHeader]
-    row_headers: dict[int | str, RowHeader]
-    bins: DataRows
+    row_headers: dict[TableKeyT, RowHeader]
+    bins: dict[TableKeyT, Sequence[Cell]]
 
     def _populate(
-        self, counts: Mapping[int | str, data.BinGroup], bin_size: int, start: Optional[datetime.datetime] = None
+        self, counts: Mapping[TableKeyT, data.BinGroup], bin_size: int, start: Optional[datetime.datetime] = None
     ) -> None:
         self.bins = {k: [Cell(v) for v in r] for k, r in counts.items()}
         self.row_headers = {}
         for key, values in counts.items():
             station_id = int(next(iter(values.annotations))) if values.annotations else None
-            self.row_headers[key] = RowHeader(str(key), station_id)
+            self.row_headers[key] = RowHeader(str(key[0] if isinstance(key, tuple) else key), station_id)
         when = start if start is not None else util.now()
         if counts:
             num_columns = max(len(r) for r in counts.values())
@@ -106,7 +106,7 @@ class Table:
         else:
             self.column_headers = []
 
-    def rows_matching(self, condition: Callable[[int | str, Sequence[Cell]], bool]) -> DataRows:
+    def rows_matching(self, condition: Callable[[TableKeyT, Sequence[Cell]], bool]) -> dict[TableKeyT, Sequence[Cell]]:
         out = {}
         for k, cells in self:
             if callable(condition) and condition(k, cells):
@@ -115,9 +115,9 @@ class Table:
 
     def tag_rows(
         self,
-        keys: Iterable[int | str],
+        keys: Iterable[TableKeyT],
         tags: Optional[Sequence[str]],
-        default_factory: Optional[Callable[[int | str, Sequence[str]], RowHeader]] = None,
+        default_factory: Optional[Callable[[TableKeyT, Sequence[str]], RowHeader]] = None,
     ) -> None:
         for key in keys:
             if key in self.bins:
@@ -127,12 +127,16 @@ class Table:
                 self.bins[key] = [Cell(0) for col in self.column_headers]
                 self.row_headers[key] = default_factory(key, tags or [])
 
-    def key_for_row(self, row_id: int | str) -> Any:
+    def key_for_row(self, row_id: TableKeyT) -> Any:
         # default sorts by the row_id itself.
         return row_id
 
-    def __iter__(self) -> Iterator[tuple[int | str, Sequence[Cell]]]:
-        order = sorted(self.bins.keys(), key=self.key_for_row)
+    def __iter__(self) -> Iterator[tuple[TableKeyT, Sequence[Cell]]]:
+        try:
+            order = sorted(self.bins.keys(), key=self.key_for_row)
+        except TypeError:
+            logger.error(",".join(str(s) for s in self.bins.keys()))
+            raise
         for k in order:
             yield (k, self.bins[k])
 
@@ -145,9 +149,9 @@ class Table:
         return "\n".join(out)
 
 
-class TableByFrequency(Table):
+class TableByFrequencyStation(Table[tuple[int, int]]):
     async def populate(self, bin_size: int, num_bins: int) -> None:
-        packets = await data.PACKET_WATCHER.packets_by_frequency(bin_size, num_bins)
+        packets = await data.PACKET_WATCHER.packets_by_frequency_station(bin_size, num_bins)
         super()._populate(packets, bin_size)
 
     async def fill_active_state(self) -> None:
@@ -157,17 +161,18 @@ class TableByFrequency(Table):
             active_by_sid: dict[int, network.StationAvailability] = {}
             active = await network.UPDATER.active_for_frame(when)
             for a in active:
+                active_by_sid[a.station_id] = a
                 for f in a.frequencies:
                     active_by_freq[f] = a
-                    active_by_sid[a.station_id] = a
-            for freq, cells in self.bins.items():
+            for key, cells in self.bins.items():
+                freq = key[0]
                 cell = cells[ix]
-                row_header = self.row_headers[freq]
+                row_header = self.row_headers[key]
                 station: network.StationAvailability | None = None
-                if row_header.station_id:
+                if station and row_header.station_id:
                     station = active_by_sid.get(row_header.station_id, None)
                 if not station:
-                    station = active_by_freq.get(int(freq), None)
+                    station = active_by_freq.get(freq, None)
                     if station:
                         row_header.station_id = station.station_id
                     else:
@@ -187,40 +192,51 @@ class TableByFrequency(Table):
                         case _:
                             row_header.tag("guess")
 
+    def tag_frequencies(
+        self,
+        freqs: Sequence[int],
+        tags: Optional[Sequence[str]],
+        default_factory: Optional[Callable[[tuple[int, int], Sequence[str]], RowHeader]] = None,
+    ) -> None:
+        rows_to_tag = []
+        absent_keys = []
+        for freq in freqs:
+            found = False
+            for bin_key in self.bins:
+                if freq == bin_key[0]:
+                    rows_to_tag.append(bin_key)
+                    found = True
+            if not found:
+                absent_keys.append((freq, network.STATIONS[freq].station_id))
+        self.tag_rows(rows_to_tag + absent_keys, tags, default_factory)
 
-class TableByBand(Table):
+
+class TableByBand(Table[int]):
     async def populate(self, bin_size: int, num_bins: int) -> None:
         packets = await data.PACKET_WATCHER.packets_by_band(bin_size, num_bins)
         super()._populate(packets, bin_size)
 
 
-class TableByStation(Table):
+class TableByStation(Table[int]):
     async def populate(self, bin_size: int, num_bins: int) -> None:
         packets = await data.PACKET_WATCHER.packets_by_station(bin_size, num_bins)
         super()._populate(packets, bin_size)
-        for k, rh in self.row_headers.items():
-            rh.station_id = int(k)
-            rh.label = f"#{k}. {network.STATIONS.get(k, 'unknown').station_name}"  # type: ignore[arg-type]
+        for key, rh in self.row_headers.items():
+            rh.station_id = int(key)
+            rh.label = f"#{key}. {network.STATIONS.get(key, 'unknown').station_name}"  # type: ignore[arg-type]
 
-    def key_for_row(self, row_id: int | str) -> Any:
+    def key_for_row(self, row_id: int) -> Any:
         # we need to sort by station ID. so, indirect lookup
         return self.row_headers[row_id].station_id or 0
 
 
-class TableByAgent(Table):
+class TableByAgent(Table[str]):
     async def populate(self, bin_size: int, num_bins: int) -> None:
         packets = await data.PACKET_WATCHER.packets_by_agent(bin_size, num_bins)
         super()._populate(packets, bin_size)
 
 
-class TableByFrequencySet(Table):
-    async def populate(self, bin_size: int, num_bins: int, frequency_sets: dict[int, str]) -> None:
-        # this is tough, since the receiver data is indirect, linked by frequency
-        packets = await data.PACKET_WATCHER.packets_by_frequency_set(bin_size, num_bins, frequency_sets)
-        super()._populate(packets, bin_size)
-
-
-class TableByReceiver(Table):
+class TableByReceiver(Table[str]):
     async def populate(self, bin_size: int, num_bins: int) -> None:
         packets = await data.PACKET_WATCHER.packets_by_receiver(bin_size, num_bins)
         super()._populate(packets, bin_size)

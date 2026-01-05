@@ -163,31 +163,23 @@ class BinGroup(list):
         self.annotations.add(annotation)
 
 
-BinnedPacketDataType = Mapping[int | str, BinGroup]
-
-
 class AbstractPacketWatcher:
     def on_hfdl(self, packet_info: hfdl.HFDLPacketInfo) -> None:
         raise NotImplementedError(str(self.__class__))
 
-    async def packets_by_frequency(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
+    async def packets_by_frequency_station(self, bin_size: int, num_bins: int) -> Mapping[tuple[int, int], BinGroup]:
         raise NotImplementedError(str(self.__class__))
 
-    async def packets_by_agent(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
+    async def packets_by_agent(self, bin_size: int, num_bins: int) -> Mapping[str, BinGroup]:
         raise NotImplementedError(str(self.__class__))
 
-    async def packets_by_station(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
+    async def packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int, BinGroup]:
         raise NotImplementedError(str(self.__class__))
 
-    async def packets_by_band(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
+    async def packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int, BinGroup]:
         raise NotImplementedError(str(self.__class__))
 
-    async def packets_by_frequency_set(
-        self, bin_size: int, num_bins: int, frequency_sets: dict[int, str]
-    ) -> BinnedPacketDataType:
-        raise NotImplementedError(str(self.__class__))
-
-    async def packets_by_receiver(self, bin_size: int, num_bins: int) -> BinnedPacketDataType:
+    async def packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[str, BinGroup]:
         raise NotImplementedError(str(self.__class__))
 
     async def count_packets_since(self, since: datetime.timedelta) -> int | None:
