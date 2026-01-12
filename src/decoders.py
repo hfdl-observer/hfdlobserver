@@ -167,7 +167,7 @@ class IQDecoderProcess(process.ProcessHarness, IQDecoder):
     def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
         IQDecoder.__init__(self, name, config, listener)
         process.ProcessHarness.__init__(self)
-        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0
+        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
 
     def commandline(self) -> list[str]:
         return IQDecoder.commandline(self)
@@ -212,7 +212,7 @@ class DirectDecoder(process.ProcessHarness, Dumphfdl):
     def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
         Dumphfdl.__init__(self, name, config, listener)
         process.ProcessHarness.__init__(self)
-        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0
+        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
 
     def create_command(self) -> DumphfdlCommand:
         command = DumphfdlCommand(

@@ -13,7 +13,6 @@ import logging
 from typing import Any, Callable, Coroutine, Generic, Iterable, Optional, Sequence, TypeVar
 
 import hfdlobserver
-import hfdl_observer.data as data
 import hfdl_observer.heat as heat
 import hfdl_observer.hfdl as hfdl
 import hfdl_observer.manage as manage

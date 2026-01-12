@@ -21,7 +21,7 @@ import sys
 import termios
 import threading
 import uuid
-from typing import IO, Any, AsyncGenerator, Callable, Coroutine, Union
+from typing import IO, Any, AsyncGenerator, Callable, Coroutine, Sequence, Union
 
 logger = logging.getLogger(__name__)
 thread_local = threading.local()
@@ -402,3 +402,20 @@ class Message:
             if hasattr(self.payload, "__len__"):
                 body = f"{body} l={len(self.payload)}"
         return f"<Message: t={self.target} s={self.subject} b={body} f={self.sender}>"
+
+
+def sparkline(nums: Sequence[int]) -> str:
+    top = max(nums)
+    bottom = min([n for n in nums if n > 0] or [0])
+    _range = top - bottom
+    step = _range // 8
+    if step == 0:
+        step = 1
+    out = []
+    for num in nums:
+        if num:
+            height = (num - bottom) // step
+            out.append(chr(int(9601 + height)))
+        else:
+            out.append(" ")
+    return "".join(out)

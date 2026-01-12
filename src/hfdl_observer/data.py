@@ -6,7 +6,7 @@
 import collections
 import dataclasses
 import datetime
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import hfdl_observer.hfdl as hfdl
 
@@ -183,6 +183,9 @@ class AbstractPacketWatcher:
         raise NotImplementedError(str(self.__class__))
 
     async def count_packets_since(self, since: datetime.timedelta) -> int | None:
+        raise NotImplementedError(str(self.__class__))
+
+    async def daily_counts(self, limit: int) -> Sequence[int]:
         raise NotImplementedError(str(self.__class__))
 
 

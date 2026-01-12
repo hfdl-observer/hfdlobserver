@@ -146,15 +146,6 @@ class StationAvailability(Table):
                 base.valid_to_frame,
             )
             conn.execute(sql, data)
-        # updates?
-        # if a.frequencies != base.frequencies:
-        #     if a.frequencies:
-        #         logger.debug(f"{base.station_id} has updated frequencies? {a.frequencies} to {base.frequencies}")
-        #     if base.frequencies:
-        #         a.frequencies = base.frequencies
-        # if base.valid_to_frame is not None and a.valid_to_frame != base.valid_to_frame:
-        #     logger.debug(f"{base.station_id} has updated valid_to {a.valid_to_frame} to {base.valid_to_frame}")
-        #     a.valid_to_frame = base.valid_to_frame
         return True
 
     @classmethod
@@ -215,12 +206,12 @@ class ReceivedPacket(Table):
                         DELETE FROM ReceivedPacket
                         WHERE received < NEW.received - {horizon_ts};
                     END;
-                """)
+                """)  # nosec
             else:
                 try:
                     conn.execute("DROP TRIGGER IF EXISTS ReceivedPacketPrune")
-                except Exception:
-                    pass
+                except Exception as err:
+                    logger.info(f"ignoring error on trigger removal {err}")
 
     def as_local(self) -> data.ReceivedPacket:
         d = self.to_dict()  # untracked_dict()
@@ -270,6 +261,34 @@ class ReceivedPacket(Table):
         since = util.now() - when
         _count: int = await util.in_db_thread(cls._count, to_timestamp(since))
         return _count
+
+    @classmethod
+    def _daily_counts(cls, when: int, cutoff: int, limit: int) -> Sequence[int]:
+        query = """
+            select FLOOR((? - received) / 86400000000), count(*)
+            from ReceivedPacket
+            where received BETWEEN ? AND ?
+            group by 1
+            order by 1
+            LIMIT ?;
+        """
+        result = [0] * limit
+        with db() as conn:
+            conn.row_factory = None
+            for row in conn.execute(query, [when, cutoff, when, limit]):
+                result[row[0]] = row[1]
+        return result
+
+    @classmethod
+    async def daily_counts(cls, limit: int) -> Sequence[int]:
+        horizon_days = settings.db["horizon"]
+        limit = min(365 if horizon_days < 0 else horizon_days, limit)
+        if limit < 1:
+            return []
+        when = util.now()
+        cutoff = when - datetime.timedelta(days=limit)
+        counts: list[int] = await util.in_db_thread(cls._daily_counts, to_timestamp(when), to_timestamp(cutoff), limit)
+        return counts
 
 
 class NetworkUpdater(network.AbstractNetworkUpdater):
@@ -347,8 +366,12 @@ class PacketWatcher(data.AbstractPacketWatcher):
             bin_number = int((when_ts - packet.received) // TS_FACTOR // bin_size)
             yield bin_number, packet
 
-    async def packets_by_frequency_station(self, bin_size: int, num_bins: int) -> Mapping[tuple[int, int], data.BinGroup]:
-        r: Mapping[tuple[int, int], data.BinGroup] = await util.in_db_thread(self._packets_by_frequency_station, bin_size, num_bins)
+    async def packets_by_frequency_station(
+        self, bin_size: int, num_bins: int
+    ) -> Mapping[tuple[int, int], data.BinGroup]:
+        r: Mapping[tuple[int, int], data.BinGroup] = await util.in_db_thread(
+            self._packets_by_frequency_station, bin_size, num_bins
+        )
         return r
 
     def _packets_by_frequency_station(self, bin_size: int, num_bins: int) -> Mapping[tuple[int, int], data.BinGroup]:
@@ -427,3 +450,6 @@ class PacketWatcher(data.AbstractPacketWatcher):
 
     async def count_packets_since(self, since: datetime.timedelta) -> int | None:
         return await ReceivedPacket.count(since)
+
+    async def daily_counts(self, limit: int) -> Sequence[int]:
+        return await ReceivedPacket.daily_counts(limit)

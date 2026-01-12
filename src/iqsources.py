@@ -90,7 +90,7 @@ class KiwiClientProcess(process.ProcessHarness, KiwiClient):
         KiwiClient.__init__(self, name, config)
         process.ProcessHarness.__init__(self)
         self.channel_width = channel_width
-        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0
+        self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
 
     def commandline(self) -> list[str]:
         return KiwiClient.commandline(self)

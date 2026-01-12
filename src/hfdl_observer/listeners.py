@@ -137,7 +137,7 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
     @functools.cached_property
     def connection_info(self) -> dict:
         address = self.settings["address"]
-        if address == "0.0.0.0" or address == "*":
+        if address == "0.0.0.0" or address == "*":  # nosec # 0.0.0.0 is only used to trigger a search.
             address = self.settings.get("advertised_address", None)
             if not address:
                 logger.warning("attempting to discover a visible IP address. This may explode.")
