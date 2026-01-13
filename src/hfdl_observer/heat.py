@@ -90,16 +90,21 @@ class Table(Generic[TableKeyT]):
     bins: dict[TableKeyT, Sequence[Cell]]
 
     def _populate(
-        self, counts: Mapping[TableKeyT, data.BinGroup], bin_size: int, start: Optional[datetime.datetime] = None
+        self, groups: Mapping[TableKeyT, data.BinGroup], bin_size: int, start: Optional[datetime.datetime] = None
     ) -> None:
-        self.bins = {k: [Cell(v) for v in r] for k, r in counts.items()}
+        self.bins = {k: [Cell(v) for v in r] for k, r in groups.items()}
         self.row_headers = {}
-        for key, values in counts.items():
-            station_id = int(next(iter(values.annotations))) if values.annotations else None
-            self.row_headers[key] = RowHeader(str(key[0] if isinstance(key, tuple) else key), station_id)
+        for key, values in groups.items():
+            if isinstance(key, tuple):
+                station_id = int(key[1])
+                label = str(key[0])
+            else:
+                station_id = int(next(iter(values.annotations))) if values.annotations else None
+                label = str(key)
+            self.row_headers[key] = RowHeader(label, station_id)
         when = start if start is not None else util.now()
-        if counts:
-            num_columns = max(len(r) for r in counts.values())
+        if groups:
+            num_columns = max(len(r) for r in groups.values())
             self.column_headers = [
                 ColumnHeader(n, when - datetime.timedelta(seconds=n * bin_size), bin_size) for n in range(num_columns)
             ]
@@ -169,7 +174,7 @@ class TableByFrequencyStation(Table[tuple[int, int]]):
                 cell = cells[ix]
                 row_header = self.row_headers[key]
                 station: network.StationAvailability | None = None
-                if station and row_header.station_id:
+                if row_header.station_id:
                     station = active_by_sid.get(row_header.station_id, None)
                 if not station:
                     station = active_by_freq.get(freq, None)
