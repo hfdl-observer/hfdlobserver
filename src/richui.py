@@ -80,6 +80,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
     garbage: collections.deque[rich.table.Table]
     day_count: int | None = None
     week_count: int | None = None
+    spark_data: Sequence[int] | None = None
 
     def __init__(
         self,
@@ -110,7 +111,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         t = rich.table.Table.grid(expand=True, pad_edge=False, padding=(0, 0))
         if self.status:
             t.add_row(self.status)
-        if self.totals:
+        if len(self.totals_text):
             t.add_row(self.totals)
         else:
             self.update_totals(self.cumulative_line.cumulative)
@@ -181,7 +182,9 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             texts[-1] += f" ♦ {self.day_count}"
         if self.week_count:
             texts[-1] += f" ♦ {self.week_count}"
-        self.totals_text.plain = f"{'  |  '.join(texts)} "
+        if self.spark_data:
+            texts[-1] += f" {util.sparkline(self.spark_data)}"
+        self.totals_text.plain = f"{' ⎮ '.join(texts)} "
 
     def update_log(self, ring: collections.deque) -> None:
         # WARNING: do not use any logger from within this method.
@@ -216,6 +219,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
     async def refresh_counts(self) -> None:
         self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
         self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
+        self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
 
     def on_forecast(self, forecast: Any) -> None:
         try:
@@ -225,21 +229,21 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             text = self.forecast
             text.plain = ""
             text.append(f"R{recent['R']['Scale'] or '-'}", style=FORECAST_STYLEMAP[recent["R"]["Text"]])
-            text.append("|")
+            text.append("⎮")
             text.append(f"S{recent['S']['Scale'] or '-'}", style=FORECAST_STYLEMAP[recent["S"]["Text"]])
-            text.append("|")
+            text.append("⎮")
             text.append(f"G{recent['G']['Scale'] or '-'}", style=FORECAST_STYLEMAP[recent["G"]["Text"]])
             text.append("  ")
             text.append(f"R{current['R']['Scale'] or '-'}", style=FORECAST_STYLEMAP[current["R"]["Text"]])
-            text.append("|")
+            text.append("⎮")
             text.append(f"S{current['S']['Scale'] or '-'}", style=FORECAST_STYLEMAP[current["S"]["Text"]])
-            text.append("|")
+            text.append("⎮")
             text.append(f"G{current['G']['Scale'] or '-'}", style=FORECAST_STYLEMAP[current["G"]["Text"]])
             text.append("  ")
             (text.append(f"R{forecast1d['R']['MinorProb']}/{forecast1d['R']['MajorProb']}", FORECAST_STYLEMAP["none"]),)
-            text.append("|")
+            text.append("⎮")
             (text.append(f"S{forecast1d['S']['Prob']}", FORECAST_STYLEMAP["none"]),)
-            text.append("|")
+            text.append("⎮")
             (text.append(f"G{forecast1d['G']['Scale'] or '-'}", FORECAST_STYLEMAP[forecast1d["G"]["Text"]]),)
         except Exception as err:
             logger.debug("ignoring forecaster error", exc_info=err)
@@ -284,14 +288,33 @@ def map_style(style: str) -> rich.style.Style | None:
     return STYLES[style]
 
 
+def transition(
+    first_style: rich.style.Style | None, second_style: rich.style.Style | None
+) -> tuple[str, rich.style.Style | None]:
+    char = "▐"
+    style = rich.style.Style(
+        color=second_style.bgcolor if second_style else None,
+        bgcolor=first_style.bgcolor if first_style else None,
+    )
+    return (char, style)
+
+
 class HeatMap(heatmapui.HeatMap):
     def celltexts_to_text(self, texts: list[heatmapui.CellText], style: Optional[rich.style.Style] = None) -> Sequence:
-        elements: list[tuple[str, str | rich.style.Style | None]] = []
+        elements: list[tuple[str, rich.style.Style | None]] = []
         for celltext in texts:
             text, textstyle = (celltext[0] if celltext[0] else "   ", celltext[1])
             if elements and elements[-1][1] == textstyle:  # if the styles are the same, they can be merged.
+                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
+                #     text = text[1:]
                 elements[-1] = (elements[-1][0] + text, map_style(textstyle))
             else:
+                # aborted attempt to use half blocks for greater data density. It doesn't help readability, and has
+                # additional layout quirks.
+                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
+                #     text = text[1:]
+                #     elements[-1] = (elements[-1][0][:-1], elements[-1][1])
+                #     elements.append(transition(elements[-1][1], map_style(textstyle)))
                 elements.append((text, map_style(textstyle)))
         result = rich.text.Text(style=style or "")
         for element in elements:

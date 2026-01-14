@@ -276,7 +276,7 @@ class Web888ExecReceiver(Web888Receiver):
         if not self.channel:
             logger.debug(f"{self} channel was empty")
             return
-        await asyncio.sleep(random.randrange(1, 40) / 20.0)  # thundering herd dispersal
+        await asyncio.sleep(random.randrange(1, 40) / 20.0)  # nosec # thundering herd dispersal
         if self.client is None:
             raise ValueError("client not set up. This should not be reached")
         if self.decoder is None:
@@ -417,7 +417,7 @@ class DirectReceiver(LocalReceiver):
             logger.info(f"{self} has no decoder")
             return
         self.publish_listening()
-        await asyncio.sleep(random.randrange(1, 20) / 10.0)  # thundering herd dispersal
+        await asyncio.sleep(random.randrange(1, 20) / 10.0)  # nosec # thundering herd dispersal
         try:
             async with util.aclosing(self.decoder.listen(self.channel)) as lifecycle:
                 async for state in lifecycle:

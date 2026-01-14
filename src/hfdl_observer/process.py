@@ -16,7 +16,7 @@ import shlex
 import signal
 
 # for thread based execution.
-import subprocess
+import subprocess  # nosec # shell usage is correctly handled.
 
 from copy import copy
 from typing import Any, AsyncGenerator, AsyncIterator, Optional

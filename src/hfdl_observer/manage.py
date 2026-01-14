@@ -45,7 +45,8 @@ class NetworkOverview(bus.EventNotifier):
         self.startables = []
         for file_source in [hfdl_observer.env.as_path(p) for p in config.get("station_files", [])]:
             file_watcher = bus.FileRefresher(file_source, period=3600)
-            assert file_source.exists(), f"{file_source} does not exist"
+            if not file_source.exists():
+                raise ValueError(f"{file_source} does not exist")
             # prime this pump... shouldn't be necessary, but.
             updater.on_systable(file_source.read_text())
             file_watcher.watch_event("text", updater.on_systable)
