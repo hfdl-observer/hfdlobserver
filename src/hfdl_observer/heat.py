@@ -96,7 +96,7 @@ class Table(Generic[TableKeyT]):
         self.row_headers = {}
         for key, values in groups.items():
             if isinstance(key, tuple):
-                station_id = int(key[1])
+                station_id: int | None = int(key[1])
                 label = str(key[0])
             else:
                 station_id = int(next(iter(values.annotations))) if values.annotations else None

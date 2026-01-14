@@ -288,14 +288,33 @@ def map_style(style: str) -> rich.style.Style | None:
     return STYLES[style]
 
 
+def transition(
+    first_style: rich.style.Style | None, second_style: rich.style.Style | None
+) -> tuple[str, rich.style.Style | None]:
+    char = "▐"
+    style = rich.style.Style(
+        color=second_style.bgcolor if second_style else None,
+        bgcolor=first_style.bgcolor if first_style else None,
+    )
+    return (char, style)
+
+
 class HeatMap(heatmapui.HeatMap):
     def celltexts_to_text(self, texts: list[heatmapui.CellText], style: Optional[rich.style.Style] = None) -> Sequence:
-        elements: list[tuple[str, str | rich.style.Style | None]] = []
+        elements: list[tuple[str, rich.style.Style | None]] = []
         for celltext in texts:
             text, textstyle = (celltext[0] if celltext[0] else "   ", celltext[1])
             if elements and elements[-1][1] == textstyle:  # if the styles are the same, they can be merged.
+                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
+                #     text = text[1:]
                 elements[-1] = (elements[-1][0] + text, map_style(textstyle))
             else:
+                # aborted attempt to use half blocks for greater data density. It doesn't help readability, and has
+                # additional layout quirks.
+                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
+                #     text = text[1:]
+                #     elements[-1] = (elements[-1][0][:-1], elements[-1][1])
+                #     elements.append(transition(elements[-1][1], map_style(textstyle)))
                 elements.append((text, map_style(textstyle)))
         result = rich.text.Text(style=style or "")
         for element in elements:
