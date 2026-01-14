@@ -42,7 +42,8 @@ class BaseDecoder:
 
     @property
     def station_id(self) -> Optional[str]:
-        return self.config.get("station_id", None)
+        result: str | None = self.config.get("station_id", None)
+        return result
 
     async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
         raise NotImplementedError()
@@ -109,11 +110,11 @@ class Dumphfdl(BaseDecoder):
             )
 
         # add any other configured outputs, such as for acarshub
-        for out in self.config.get("output", None) or []:
+        for o in self.config.get("output", None) or []:
             cmd.extend(
                 [
                     "--output",
-                    f"decoded:{out.get('format', 'json')}:{out['protocol']}:address={out['address']},port={out['port']}",
+                    f"decoded:{o.get('format', 'json')}:{o['protocol']}:address={o['address']},port={o['port']}",
                 ]
             )
 

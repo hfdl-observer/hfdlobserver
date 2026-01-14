@@ -117,7 +117,7 @@ The next line provides an overview of the total stats since the app started.
 - ❔ packets without positions
 - 📰 squitter (network update) packets received
 - 🔎 number of frequencies being observed out of the total active frequencies
-- 📶 total number of packets
+- 📶 total number of packets (The number first is the packets since the app was last started. The second is the total packets in the last day. See also the Advanced Settings document for further options.)
 
 
 ### Command Keys

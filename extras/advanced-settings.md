@@ -368,6 +368,24 @@ Several basic output profiles are provided, so you can include them and only ove
 - `acarshub` - simialr to `acars_router` only with a default address of `acarshub.local`
 - `readsb` - a `basestation` output over `tcp`, by default to `readsb.local:30009`.
 
+### `db`
+
+In almost all situations, the in-memory tracking of packets for the display is sufficient. However, it is possible to configure HFDLObserver to persist its internal database to your machine's storage. This is configured via the `db` section.
+
+```yaml
+db:
+  uri: hfdlobserver.db
+  horizon: 7
+```
+
+**If you are using a system with an SDCard (or EMMC) as primary storage, you almost certainly do not want to do this**
+
+- `uri`: the filename or SQLite URI for the database. If absent, uses an in-memory database. A raw filename is also accepted.
+- `horizon`: the number of _days_ of history to keep. Specify a negative number to keep data with no limits.
+
+If the `horizon` is at least 7, an additional number is added to the total packets count, representing the packet count for the last 7 days.
+
+
 ## Abbreviated Settings Examples
 
 The following sections provide some abbreviated samples of various configurations that may be of interest. These are not complete examples. They focus on the important differences from a "vanilla" configuration. Where you see `...` in the example, this is where you would put elements from the vanilla or your own customized settings.

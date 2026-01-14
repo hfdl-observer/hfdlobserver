@@ -97,7 +97,7 @@ class PeriodicTask:
             self.task = util.schedule(self.run())
 
     async def stop(self) -> None:
-        task = getattr(self, "task")
+        task = self.task
         if task:
             self.enabled = False
             task.cancel()

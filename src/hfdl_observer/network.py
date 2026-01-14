@@ -116,6 +116,10 @@ class StationAvailability:
 
 # protocol, really.
 class AbstractNetworkUpdater(bus.EventNotifier):
+    def __init__(self) -> None:
+        super().__init__()
+        self._active_ts = functools.lru_cache(maxsize=128)(self._active_ts)  # type: ignore[method-assign]
+
     async def current(self) -> Sequence[StationAvailability]:
         raise NotImplementedError()
 
@@ -127,7 +131,8 @@ class AbstractNetworkUpdater(bus.EventNotifier):
 
     # lru_cache does not work with async functions, so instead of using coroutines, we return a Task which is a Future
     # and can be reawaited... and therefore cached. There are some corner cases but none of those should appear here.
-    @functools.lru_cache(maxsize=128)
+    # method is wrapped in cacher during init, though there's not really an issue with this object not getting GC'd.
+    # @functools.lru_cache(maxsize=128)
     def _active_ts(self, timestamp: int) -> asyncio.Task[Sequence[StationAvailability]]:
         return util.schedule(self.active(util.timestamp_to_datetime(timestamp)))
 
@@ -283,9 +288,6 @@ class AbstractNetworkUpdater(bus.EventNotifier):
         if hfdl_stations:
             STATIONS.update(hfdl_stations)
             await self.updated()
-
-    def prune(self, _: Any = None) -> None:
-        pass
 
 
 class CumulativePacketStats(bus.EventNotifier):

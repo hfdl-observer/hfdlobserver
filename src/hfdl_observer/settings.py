@@ -54,7 +54,7 @@ def dereference_dumphfdl(dumphfdl: MutableMapping, *configs: MutableMapping) -> 
             resolved_outputs.append(output)
         else:
             complex_outputs.setdefault(key, []).append(output)
-    for k, mappings in complex_outputs.items():
+    for mappings in complex_outputs.values():
         chained = util.DeepChainMap(*mappings) if len(mappings) > 1 else mappings[0]
         resolved_outputs.append(dereference_output(chained, *configs))
     outputs = {"output": resolved_outputs}
@@ -129,7 +129,7 @@ def load(filepath: Union[str, pathlib.Path]) -> MutableMapping:
                 defaults[parent_key]["local_receivers"], registry, defaults
             )
     _globals = globals()
-    for key in ["observer", "cui", "node", "viewer", "aggregator"]:
+    for key in ["observer", "cui", "node", "viewer", "aggregator", "db"]:
         _globals[key] = chained(key, registry, defaults)
     return registry
 
@@ -298,12 +298,17 @@ defaults: dict[str, Any] = {
             },
         },
     },
+    "db": {
+        "uri": "file:mem1?mode=memory&cache=shared",
+        "horizon": 1,
+    },
 }
 observer: MutableMapping = {}
 cui: MutableMapping = {}
 node: MutableMapping = {}
 viewer: MutableMapping = {}
 aggregator: MutableMapping = {}
+db: MutableMapping = {}
 
 
 def deepchainmap_representer(dumper: yaml.SafeDumper, dcm: util.DeepChainMap) -> yaml.nodes.MappingNode:
