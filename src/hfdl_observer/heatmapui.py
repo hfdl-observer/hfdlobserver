@@ -167,7 +167,7 @@ class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequency
 
     async def fetch(self) -> None:
         def rowheader_factory(key: tuple[int, int], tags: Sequence[str]) -> heat.RowHeader:
-            return heat.RowHeader(str(key), station_id=key[1], tags=tags)
+            return heat.RowHeader(str(key[0]), station_id=key[1], tags=tags)
 
         self.source = heat.TableByFrequencyStation()
         await self.source.populate(self.bin_size, self.num_bins)
