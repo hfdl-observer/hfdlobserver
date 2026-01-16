@@ -387,11 +387,11 @@ class HeatMap:
 
     def set_bin_size(self, bin_size: int) -> None:
         self.bin_size = min(3600, max(60, int(bin_size)))
-        self.maybe_render()
+        self.maybe_render(now=True)
 
     def set_flexible_width(self, flexible_width: bool) -> None:
         self.flexible_width = flexible_width
-        self.maybe_render()
+        self.maybe_render(now=True)
 
     def select_display_mode(self, mode: str, *_: Any) -> None:
         self.current_mode = mode
@@ -399,7 +399,7 @@ class HeatMap:
             self.data_source = self.all_modes[mode]
         except KeyError:
             raise ValueError(f"display mode not supported: {mode}") from None
-        self.maybe_render()
+        self.maybe_render(now=True)
 
     def toggle_flexible_width(self) -> None:
         self.set_flexible_width(not self.flexible_width)
@@ -459,14 +459,18 @@ class HeatMap:
         if not self.task:
             self.start()
 
-    def maybe_render(self) -> None:
+    def maybe_render(self, now: bool = False) -> None:
         try:
             asyncio.current_task()
         except Exception as err:
             logger.debug(f"not in a task? {err}")
             return
         next_render_time = self.last_render_time + MAP_REFRESH_DELTA
-        if self.deferred_render_task is None:
+        if now:
+            if self.deferred_render_task:
+                self.deferred_render_task.cancel()
+            self.deferred_render_task = util.schedule(self.render())
+        elif self.deferred_render_task is None:
             if next_render_time <= util.now():
                 self.deferred_render_task = util.schedule(self.render())
             else:

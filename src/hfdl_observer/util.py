@@ -17,6 +17,7 @@ import math
 import os
 import re
 import select
+import signal
 import sys
 import termios
 import threading
@@ -278,7 +279,7 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
                 break
             if ord(key) in (3, 4):  # ^C, ^D
                 logger.warning("break received")
-                shutdown_event.set()
+                shutdown()
                 break
             if pacing > 0:
                 when = now()
@@ -419,3 +420,8 @@ def sparkline(nums: Sequence[int]) -> str:
         else:
             out.append(" ")
     return "".join(out)
+
+
+def shutdown(*_, **__) -> None:
+    shutdown_event.set()
+    os.kill(os.getpid(), signal.SIGINT)
