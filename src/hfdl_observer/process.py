@@ -226,6 +226,8 @@ class Command:
                 for result in await asyncio.gather(*awaitables, return_exceptions=True):
                     if isinstance(result, asyncio.TimeoutError):
                         self.process_logger.debug(f"signal {sig} may have been ignored.")
+            except asyncio.TimeoutError:
+                self.process_logger.debug(f"signal {sig} timeout")
             except asyncio.CancelledError:
                 self.process_logger.debug(f"signal {sig} cancelled")
             except Exception as err:

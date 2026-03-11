@@ -271,7 +271,7 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
         pacing_delta = datetime.timedelta(seconds=pacing)
         last_keystroke: datetime.datetime | None = None
         while not is_shutting_down():
-            key = await in_thread(read_with_timeout)
+            key = await in_ui_thread(read_with_timeout)
             if key is None:
                 continue
             if not key:
@@ -349,7 +349,7 @@ class aclosing(contextlib.AbstractAsyncContextManager):
 async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
     if not hasattr(thread_local, "executor"):
-        thread_local.executor = concurrent.futures.ThreadPoolExecutor(max_workers=64)
+        thread_local.executor = concurrent.futures.ThreadPoolExecutor(max_workers=96)
     loop: asyncio.AbstractEventLoop = thread_local.loop
 
     def run() -> Any:
@@ -373,7 +373,7 @@ async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
 async def in_ui_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
     if not hasattr(thread_local, "ui_executor"):
-        thread_local.ui_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        thread_local.ui_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
     loop: asyncio.AbstractEventLoop = thread_local.loop
 
     def run() -> Any:
