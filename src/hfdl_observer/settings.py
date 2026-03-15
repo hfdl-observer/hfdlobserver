@@ -137,7 +137,7 @@ def load(filepath: Union[str, pathlib.Path]) -> MutableMapping:
 defaults: dict[str, Any] = {
     "observer": {
         "conductor": {
-            "type": "DiverseConductor",
+            "type": "diverse",
             # "ranked_stations": [],
             # "ignored_frequencies": []
         },

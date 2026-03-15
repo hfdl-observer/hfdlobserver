@@ -10,7 +10,7 @@ import datetime
 import functools
 import logging
 from enum import Enum
-from typing import Any, Optional, Sequence, Union
+from typing import Optional, Sequence, Union
 
 import hfdl_observer.bus as bus
 import hfdl_observer.hfdl as hfdl
@@ -337,11 +337,15 @@ class StationLookup:
             self.refresh()
 
     def add_observed(self, sid: int, frequency: int) -> None:
-        station = self.by_id[sid]
-        station.observed_frequencies = station.observed_frequencies or set()
-        if frequency not in station.observed_frequencies:
-            station.observed_frequencies.add(frequency)
-            self.refresh()
+        try:
+            station = self.by_id[sid]
+        except AttributeError:
+            logger.info(f'StationLookup not fully initialised. Dropping {sid}/{frequency}.')
+        else:
+            station.observed_frequencies = station.observed_frequencies or set()
+            if frequency not in station.observed_frequencies:
+                station.observed_frequencies.add(frequency)
+                self.refresh()
 
     def refresh(self) -> None:
         self.by_freq = {}

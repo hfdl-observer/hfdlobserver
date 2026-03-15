@@ -262,6 +262,12 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
                 logger.warning(f"proxy {proxy.name}:{proxy} is dead. Removing.")
                 self.remove_receiver(proxy)
 
+    def maybe_describe_receivers(self, *_: Any, force: bool = False) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
+        raise NotImplementedError(self.__class__.__name__)
+
 
 class StaticOrchestrator(AbstractOrchestrator):
     def __init__(self, config: dict) -> None:
@@ -276,16 +282,57 @@ class StaticOrchestrator(AbstractOrchestrator):
             return []
 
         actual_channels = []
-        for name, frequencies in self.allocations.items():
+        allocated_names: set[str] = set()
+        for proxy in self.proxies:
             try:
-                proxy = self.proxies[name]
+                frequencies = self.allocations[proxy.name]
             except KeyError:
+                logger.info(f"no allocation for {proxy.name}")
+            else:
+                allocated_names.add(proxy.name)
+                if proxy.channel is None or set(frequencies) != set(proxy.channel.frequencies):
+                    proxy.listen(frequencies)
+                if proxy.channel is not None:
+                    actual_channels.append(proxy.channel)
+        for name in self.allocations.keys():
+            if name not in allocated_names:
                 logger.info(f"no proxy for {name}")
-                continue
-            if not proxy.channel.matches(frequencies):
-                proxy.listen(data.ObservingChannel(data.ChannelObserver.required_width(frequencies), frequencies))
-            if proxy.channel is not None:
-                actual_channels.append(proxy.channel)
+        return actual_channels
+
+
+class BFIOrchestrator(AbstractOrchestrator):
+    def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
+        self.validate_proxies()
+        if not self.proxies:
+            return []
+
+        actual_channels = []
+
+        assigned: list[int] = [i for j in network.STATIONS.assigned().values() for i in j]
+        assigned.sort()
+        covered: list[int] = []
+        # ignore assigned weights. Make sort consistent using (width, name) tuple.
+        sorted_proxies = sorted(self.proxies, key=lambda e: (max(e.observable_widths()), e.name), reverse=True)
+        for receiver in sorted_proxies:
+            width = max(receiver.observable_widths())
+            candidates = []
+            for base_freq in assigned:
+                if base_freq in covered:
+                    continue
+                current = data.ObservingChannel(width, [base_freq])
+                for freq in assigned:
+                    if freq not in covered:
+                        current.maybe_add(freq)
+                candidates.append(current)
+            ordered = sorted(candidates, key=lambda e: len(e.frequencies), reverse=False)
+            if ordered:
+                largest = ordered[-1].frequencies
+                covered.extend(largest)
+                if receiver.channel is None or set(largest) != set(receiver.channel.frequencies):
+                    receiver.listen(largest)
+                if receiver.channel is not None:
+                    actual_channels.append(receiver.channel)
+
         return actual_channels
 
 
@@ -429,9 +476,6 @@ class UniformOrchestrator(AbstractOrchestrator):
         self.assign_channels(actual_channels)
         return actual_channels
 
-    def maybe_describe_receivers(self, *_: Any, force: bool = False) -> None:
-        raise NotImplementedError(self.__class__.__name__)
-
 
 class DiverseOrchestrator(UniformOrchestrator):
     def observable_widths(self) -> list[int]:
@@ -522,18 +566,32 @@ class Reaper(bus.EventNotifier):
                 self.notify_event("dead-receiver", channel.frequencies)
 
 
+ORCHESTRATOR_LOOKUP = {
+    'diverse': DiverseOrchestrator,
+    'static': StaticOrchestrator,
+    'bfi': BFIOrchestrator,
+}
+
+
+def pick_orchestrator(conductor_config: dict) -> AbstractOrchestrator:
+    orchestrator_type = conductor_config.get('type', 'diverse')
+    klass = ORCHESTRATOR_LOOKUP[orchestrator_type]
+    return klass(conductor_config)
+
+
 class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     proxies: dict[str, ReceiverProxy]
     orchestration_task: None | asyncio.Handle = None
     last_orchestrated: datetime.datetime
     listener_info: dict
+    conductor: AbstractOrchestrator
 
     def __init__(self, config: collections.abc.Mapping) -> None:
         super().__init__()
         self.config = config
         self.uuid = f"@{uuid.uuid4()}"
         self.proxies = {}
-        self.conductor = DiverseOrchestrator(config["conductor"])
+        self.conductor = pick_orchestrator(config["conductor"])
         messaging.subscribe(self, self.uuid)
         self.announcer = bus.PeriodicCallback(10, [self.announce], False)
         self.watchdog = bus.PeriodicCallback(30, [self.heartbeat], chatty=False)
