@@ -422,6 +422,6 @@ def sparkline(nums: Sequence[int]) -> str:
     return "".join(out)
 
 
-def shutdown(*_, **__) -> None:
+def shutdown(*_: object, **__: object) -> None:
     shutdown_event.set()
     os.kill(os.getpid(), signal.SIGINT)
