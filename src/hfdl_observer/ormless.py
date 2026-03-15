@@ -51,9 +51,13 @@ def db() -> sqlite3.Connection:
         _db: sqlite3.Connection = util.thread_local.db
     except AttributeError:
         dburi = settings.db["uri"]
-        _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
-        StationAvailability._table(_db)
-        ReceivedPacket._table(_db)
+        try:
+            _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
+            StationAvailability._table(_db)
+            ReceivedPacket._table(_db)
+        except Exception as err:
+            logger.error(f"Error opening database: {err}", exc_info=err)
+            util.shutdown()
     return _db
 
 
@@ -119,6 +123,7 @@ class StationAvailability(Table):
                       < coalesce(NEW.valid_to_frame, NEW.valid_at_frame) - 86400 / 32;
             END;
         """)
+        _db.execute("REINDEX StationAvailability;")
 
     def as_local(self) -> network.StationAvailability:
         d = self.to_dict()  # untracked_dict()
@@ -212,6 +217,7 @@ class ReceivedPacket(Table):
                     conn.execute("DROP TRIGGER IF EXISTS ReceivedPacketPrune")
                 except Exception as err:
                     logger.info(f"ignoring error on trigger removal {err}")
+            conn.execute("REINDEX ReceivedPacket;")
 
     def as_local(self) -> data.ReceivedPacket:
         d = self.to_dict()  # untracked_dict()
