@@ -1,3 +1,26 @@
+- [Advanced Topics](#advanced-topics)
+  - [Settings](#settings)
+    - [Configuration files](#configuration-files)
+    - [Basic structure](#basic-structure)
+    - [Yes/No or “Similar values”](#yesno-or-similar-values)
+    - [Ranges](#ranges)
+    - [`observer`](#observer)
+    - [`messaging`](#messaging)
+    - [`cui`](#cui)
+    - [`receivers`](#receivers)
+    - [`dumphfdl`](#dumphfdl)
+    - [`output`](#output)
+    - [`db`](#db)
+  - [Abbreviated Settings Examples](#abbreviated-settings-examples)
+    - [tandem](#tandem)
+    - [alpha web-888 roms](#alpha-web-888-roms)
+    - [wide888](#wide888)
+  - [Running as a Traffic Viewer (tbd)](#running-as-a-traffic-viewer-tbd)
+  - [Running as a remote “node”](#running-as-a-remote-node)
+  - [Experimental Conductor Options (Not Supported)](#experimental-conductor-options-not-supported)
+    - [`type: static` (Experimental)](#type-static-experimental)
+    - [`type: bfi` (Experimental)](#type-bfi-experimental)
+
 # Advanced Topics
 
 This document discusses some advanced configurations for HFDLObserver.
@@ -23,26 +46,26 @@ As a reminder, key points for YAML:
 - subsections are indented.
 - indentation must be consistent
 - indentation is done with spaces
-- while strings/text may *usually* be left unquoted, it's best to quote using either single or double quotes. Don't quote numbers.
+- while strings/text may *usually* be left unquoted, it’s best to quote using either single or double quotes. Don’t quote numbers.
 - a list of items begins with a `-` and an indent for properties on each item in the list.
 
 ### Basic structure
 
 The settings.yaml file has several sections.
 
-- `observer` - controls the central behaviour -- managing receivers and gathering data
-- `node` - controls behaviour when HFDLObserver is run in "node" mode to be managed by a remote "observer". (More documentation on this mode is coming Real Soon Now.)
-- `cui` - controls the behaviour of the Console UI, which is the "fancy" display
+- `observer` - controls the central behaviour – managing receivers and gathering data
+- `node` - controls behaviour when HFDLObserver is run in “node” mode to be managed by a remote “observer”. (More documentation on this mode is coming Real Soon Now.)
+- `cui` - controls the behaviour of the Console UI, which is the “fancy” display
 
 There are also sections that are used to build the configuration of the receivers that HFDLObserver controls.
 
 - `receiver` - defines the top level configuration of the receiver
 - `dumphfdl` - define the possible configurations of dumphfdl that are used by receivers
-- `output` - defines possible outputs that can be used in receivers' dumphfdl
+- `output` - defines possible outputs that can be used in receivers’ dumphfdl
 
-### Yes/No or "Similar values"
+### Yes/No or “Similar values”
 
-Some properties take "Yes/No or Similar values". means any of a number of different representations of yes or no.
+Some properties take “Yes/No or Similar values”. means any of a number of different representations of yes or no.
 
 - For yes: `"yes"`, `"true"`, `true`, `"y"`, or `1`
 - For no: `"no"`, `"false"`, `false`, `"n"`, or `0`
@@ -51,7 +74,7 @@ Some properties take "Yes/No or Similar values". means any of a number of differ
 
 Some properties accept a list of ranges.
 
-```yaml
+``` yaml
 property_name: [1000, 2000, [3000, 8000]]
 ```
 
@@ -61,14 +84,13 @@ A list of ranges is a list (`[]`) of either:
 
 In the example above, the exact values 1000, and 2000 are included, as is the range from 3000 to 8000 (inclusive).
 
-
 ### `observer`
 
 #### `conductor`
 
 This controls how frequencies are allocated to receivers.
 
-```yaml
+``` yaml
   conductor:
     ranked_stations: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16]
     ignored_frequencies: [10000, [0, 3000]]
@@ -80,9 +102,9 @@ This controls how frequencies are allocated to receivers.
 
 #### `local_receivers`
 
-This subsection describes the receivers that HFDLObserver *directly* controls -- as opposed to "remote" nodes that manage additional receivers under HFDLObserver's command. It is a list of objects. In theory, these could be quite complicated. In general, though, each entry will provide only a `name` and a `receiver` template to use for the receiver. The receiver object is described in detail in the `receivers` section later.
+This subsection describes the receivers that HFDLObserver *directly* controls – as opposed to “remote” nodes that manage additional receivers under HFDLObserver’s command. It is a list of objects. In theory, these could be quite complicated. In general, though, each entry will provide only a `name` and a `receiver` template to use for the receiver. The receiver object is described in detail in the `receivers` section later.
 
-```yaml
+``` yaml
   local_receivers:
     - name: local-01
       receiver: web888
@@ -98,7 +120,7 @@ Each local receiver needs an entry here. If you were to use a Web-888 device, yo
 
 This represents a lightweight endpoint for accepting HFDL packets in JSON format as emitted by dumphfdl. This is how HFDLObserver knows about packets that its receivers have received. If you are running in a stock configuration, there is little reason to include this section or alter the defaults.
 
-```yaml
+``` yaml
   hfdl_listener:
     address: "127.0.0.1"
     port: 5540
@@ -107,13 +129,13 @@ This represents a lightweight endpoint for accepting HFDL packets in JSON format
 
 - `address` - The address to listen on. Specify `"0.0.0.0"` to listen to all available addresses your computer has.
 - `port` - The UDP port to listen on. The port is advertised to any receivers that HFDLObserver is managing.
-- `advertised_address` - When you use a generic address such as `"0.0.0.0"` as `address`, external/remote nodes will not know what address to contact. This is used for providing an explicit address to advertise to such nodes. If you aren't running any "remote" nodes, there's no reason to change this. If this is omitted and it is needed, HFDLObserver will try to guess, but it is very easy for it to be wrong.
+- `advertised_address` - When you use a generic address such as `"0.0.0.0"` as `address`, external/remote nodes will not know what address to contact. This is used for providing an explicit address to advertise to such nodes. If you aren’t running any “remote” nodes, there’s no reason to change this. If this is omitted and it is needed, HFDLObserver will try to guess, but it is very easy for it to be wrong.
 
 #### `tracker`
 
-This is another section you probably won't need to change. It manages how ground stations frequencies are tracked.
+This is another section you probably won’t need to change. It manages how ground stations frequencies are tracked.
 
-```yaml
+``` yaml
   tracker:
     save_delay: 8
     state: "stations.state"
@@ -125,13 +147,13 @@ This is another section you probably won't need to change. It manages how ground
         period: 3600
 ```
 
-- `save_delay` - A number in seconds. HFDLObserver will wait this many seconds after a change in a ground station's frequencies before updating persistent data, or triggering a re-orchestration. This allows potentially several changes to be bundled together.
+- `save_delay` - A number in seconds. HFDLObserver will wait this many seconds after a change in a ground station’s frequencies before updating persistent data, or triggering a re-orchestration. This allows potentially several changes to be bundled together.
 - `state` - A filename to cache the station active frequency data. This allows better recovery from network outages and restarts.
-- `station_files` - This is a list of filenames/paths to the "systable.conf" files that dumphfdl uses. Usually there will be only one entry, and it defaults to the one provided in the repository. Unless you're doing something weird, you won't need to change this.
+- `station_files` - This is a list of filenames/paths to the “systable.conf” files that dumphfdl uses. Usually there will be only one entry, and it defaults to the one provided in the repository. Unless you’re doing something weird, you won’t need to change this.
 
 #### `station_updates`
 
-This is a list of objects that tell HFDLObserver where to source "community" updates of active frequencies. The default uses [HFDLObserver](https://hfdl.observer/)'s own aggregator, but there are others. The format accepted for the data is a superset of the Airframes Ground Station API. You generally will not need to alter this.
+This is a list of objects that tell HFDLObserver where to source “community” updates of active frequencies. The default uses [HFDLObserver](https://hfdl.observer/)’s own aggregator, but there are others. The format accepted for the data is a superset of the Airframes Ground Station API. You generally will not need to alter this.
 
 Each station_update object contains two properties:
 - `url` - the URL of the community data source
@@ -141,7 +163,7 @@ Each station_update object contains two properties:
 
 Used to configure the control plane (messaging) for HFDLObserver. Unless you have port conflicts, you should never need to change this.
 
-```yaml
+``` yaml
   messaging:
     host: "0.0.0.0"
     pub_port: 5559
@@ -158,9 +180,9 @@ This section configures the initial behaviour of the Console UI. It is currently
 
 #### `ticker`
 
-This subsection configures the flowing "heat map" displayed at the top of the UI.
+This subsection configures the flowing “heat map” displayed at the top of the UI.
 
-```yaml
+``` yaml
 cui:
   ticker:
     bin_size: 60
@@ -174,27 +196,26 @@ cui:
 
 - `bin_size` - packets are grouped into bins of this many seconds for display. Minimum value is `60`, maximum value is `3600`. The default is `60`
 - `display_mode` - the initial kind of heat map displayed. The default is `frequency`. The valid values:
-    - `frequency` - each row is a frequency, and the map shows packet counts for each bin for each frequency.
-    - `band` - each row is a "MHz band", which groups counts for all frequencies based on their integral MHz.
-    - `station` - packets are grouped by the source or destination ground station, regardless of frequency.
-    - `agent` - packets are grouped by the "agent" (dumphfdl's "station") representing the station name that would appear at airframes.io.
-    - `receiver` - packets are grouped by the managed receiver (by name) that captured the packet. If packets come from a receiver that is not registered with HFDLObserver, they will show up as "unknown".
+  - `frequency` - each row is a frequency, and the map shows packet counts for each bin for each frequency.
+  - `band` - each row is a “MHz band”, which groups counts for all frequencies based on their integral MHz.
+  - `station` - packets are grouped by the source or destination ground station, regardless of frequency.
+  - `agent` - packets are grouped by the “agent” (dumphfdl’s “station”) representing the station name that would appear at airframes.io.
+  - `receiver` - packets are grouped by the managed receiver (by name) that captured the packet. If packets come from a receiver that is not registered with HFDLObserver, they will show up as “unknown”.
 - `flexible_width`: `yes`/`no` (or similar values, see above). When `yes`, the width of each bin column can vary depending on the packet count. This gives a precise number of packets, but can reduce the number of bins visible once you get to hundreds of packets per bin. This is most useful for users using large `bin_size`s. When `no`, each packet count is represented by a single character and the maximum number of bins is shown. The default is `no`.
-- `show_all_active`: `yes`/`no` (or similar values, see above). When `yes`, all frequencies marked "active" even if there are no receivers assigned to the frequency or if no recent packets have been received on that frequency. The default is `no`.
+- `show_all_active`: `yes`/`no` (or similar values, see above). When `yes`, all frequencies marked “active” even if there are no receivers assigned to the frequency or if no recent packets have been received on that frequency. The default is `no`.
 - `show_active_line`: `yes`/`no` (or similar values, see above). When `yes`, the display will use a horizontal line to represent the period that an active frequency has been active (to the best of its knowledge). This helps illustrate when a ground station switches from one frequency to another. The default is `yes`.
 - `show_confidence`: `yes`/`no` (or similar values, see above). When `yes`, the UI contains a symbol (in a circle) indicate how confident HFDLObserver is that this is an active frequency. There are some cases when squitters are not received directly from a ground station, and HFDLObserver relies on data from other ground stations. This can be somewhat out of date. The default is `yes`.
-- `show_targetting`: `yes`/`no` (or similar values, see above). When `yes`, an additional symbol (in a square) indicates whether the given frequency is being actively targetted, is an "extra" that happens to be in the scanning range of a receiver, or is not tracked. The default is `no`. This is mostly used for debugging issues in the orchestrator.
-
+- `show_targetting`: `yes`/`no` (or similar values, see above). When `yes`, an additional symbol (in a square) indicates whether the given frequency is being actively targetted, is an “extra” that happens to be in the scanning range of a receiver, or is not tracked. The default is `no`. This is mostly used for debugging issues in the orchestrator.
 
 ### `receivers`
 
-This section defines the types of receivers that can be added in `observer` § `local_receivers`. Any setting specified in the template can be overridden for a specific receiver, but its "path" has to match. There are examples of this in the **Abbreviated Settings Examples** section.
+This section defines the types of receivers that can be added in `observer` § `local_receivers`. Any setting specified in the template can be overridden for a specific receiver, but its “path” has to match. There are examples of this in the **Abbreviated Settings Examples** section.
 
 Each receiver template is defined in its own subsection, with a unique name. A receiver always includes a `decoder` section, that represents configuration for managing (and running) dumphfdl. Some *types* of Receiver also add a `client` section. This is used for `web-888` receivers, since they need a separate process to stream the IQ data from the device to the decoder/dumphfdl.
 
 The basic structure of a receiver will look like this (lines with elipses represent settings that are discussed later, not literal lines):
 
-```yaml
+``` yaml
 receivers:
   web-888:
     type: "Web888ExecReceiver"
@@ -215,21 +236,21 @@ Some receiver *types* are predefined. If you have a subsection in your `receiver
 
 - `web888` - the default receiver template for managing a connection and decoding of Web-888 channels.
 - `airspyhf` - a receiver template for managing Airspy HF+ (and probably some other related) devices. The SoapyAirspyHF library must be installed for this to work. This is not done automatically during installation.
-- `rx888mk2` - a receiver template for managing Web-888's sibling device: RX-888 mk2. This depends on the Soapy driver contained in the ExtIO library, so that must be installed/built for this template to work.
+- `rx888mk2` - a receiver template for managing Web-888’s sibling device: RX-888 mk2. This depends on the Soapy driver contained in the ExtIO library, so that must be installed/built for this template to work.
 - `rspdx+sdrplay` - a receiver template for managing SDRPlay RSPdx devices using the proprietary SDRPplay API. The proprietary drivers and the related SoapySDRPlay library must be installed/built for this template to work.
 
-The following receiver templates are incomplete or experimental. Don't expect them to work.
+The following receiver templates are incomplete or experimental. Don’t expect them to work.
 
 - `rsp1a+sdrplay` - an untested receiver template similar to `rspdx+sdrplay`, only for SDRPlay RSP1a devices.
 - `rspdx+miri` - a broken receiver template for RSPdx using the open source Mirics Soapy driver. This driver does not actually support RSPdx, so this currently does not function.
 - `pipe888` - a different way of managing Web-888 channels. (in this case, a shell manages the pipe rather than HFDLObserver directly)
-- `dummy` - for development, this does nothing except receive an assignment, and pretend it's doing something. For development.
+- `dummy` - for development, this does nothing except receive an assignment, and pretend it’s doing something. For development.
 
 #### `receiver` § `type: Web888ExecReceiver`
 
-This is the basis for the default template `web888`. It uses a client process to fetch IQ data from the Web-888 device and a decoder process (dumphfdl) to process the signals and generate HFDL packets. It also allows you to specify the overall sample rate available. 
+This is the basis for the default template `web888`. It uses a client process to fetch IQ data from the Web-888 device and a decoder process (dumphfdl) to process the signals and generate HFDL packets. It also allows you to specify the overall sample rate available.
 
-```yaml
+``` yaml
   web888:
     type: "Web888ExecReceiver"
     channel_width: 12000
@@ -251,22 +272,22 @@ This is the basis for the default template `web888`. It uses a client process to
 This is a fairly complete example representing the default definition of the `web888` template. In your settings file, you will only need to specify those settings you wish to override and the reasonable defaults will be applied to the others.
 
 - `type` - this determines that this is the `Web888ExecReceiver` type.
-- `channel_width` - each channel managed on receivers of this type will have this bandwidth (in samples/second or hz). The default (12000) is fine for most cases, but also see the **Abbreviated Settings Examples** "wide888" and "alpha web-888" for other uses.
+- `channel_width` - each channel managed on receivers of this type will have this bandwidth (in samples/second or hz). The default (12000) is fine for most cases, but also see the **Abbreviated Settings Examples** “wide888” and “alpha web-888” for other uses.
 
 ##### `client`
 
 - `type` - Technically, there could be different types of client, but only one (currently) makes sense for this Receiver type: `KiwiClientProcess`.
-- `address` - the network name or address of the Web-888 device to use for this receiver. See the **Abbreviated Settings Example** "tandem" to see how this can be used to manage multiple Web-888 devices on the same network.
+- `address` - the network name or address of the Web-888 device to use for this receiver. See the **Abbreviated Settings Example** “tandem” to see how this can be used to manage multiple Web-888 devices on the same network.
 - `port` - the port on `address` where KiwiSDR web requests can be made. The default is almost always what you want.
 - `settle_time` - a number in seconds representing the delay between stopping a previous use of the receiver, and restarting it (with new frequency assignments). This allows the device to reset the connection.
 - `quiet` - setting this to `true` will reduce the log output of the client process a little.
-- `username` - used by the Web-888 device to identify who's using a particular channel. The default is one that works for the default installation. Password protected access is not supported.
-- `agc_files` - this is a mapping of a frequency band to a **AGC YAML** that Web-888 can recognize. The keys for the mapping are the band's frequency in MHz, and the value is the name of the file containing the AGC curve definition (see below). A key of `"*"` can also be specified; this serves as the default if a band is not provided or the file is not found. This is advanced tinkering, but can eke out slightly better reception if you can stand the near voodoo nature of these curves. (The useful bands are `"*"`, `2`, `3`, `4`, `5`, `6`, `8`, `10`, `11`, `13`, `15`, `17`, and `21`.)
+- `username` - used by the Web-888 device to identify who’s using a particular channel. The default is one that works for the default installation. Password protected access is not supported.
+- `agc_files` - this is a mapping of a frequency band to a **AGC YAML** that Web-888 can recognize. The keys for the mapping are the band’s frequency in MHz, and the value is the name of the file containing the AGC curve definition (see below). A key of `"*"` can also be specified; this serves as the default if a band is not provided or the file is not found. This is advanced tinkering, but can eke out slightly better reception if you can stand the near voodoo nature of these curves. (The useful bands are `"*"`, `2`, `3`, `4`, `5`, `6`, `8`, `10`, `11`, `13`, `15`, `17`, and `21`.)
 
 ##### `decoder`
 
 - `type` - Technically, there could be different types of decoder, but only one (currently) makes sense for this Receiver type: `IQDecoderProcess`
-- `dumphfdl` - Specifies the dumphfdl profile to use. See the **dumphfdl** section below. 
+- `dumphfdl` - Specifies the dumphfdl profile to use. See the **dumphfdl** section below.
 - additional values may be specified here to override the values inherited from the dumphfdl profile.
 
 #### `receiver` § `type: DirectReceiver`
@@ -277,7 +298,7 @@ As dumphfdl access the radio directly, no `client` is required, and there is onl
 
 This example is the default definition of the `airspyhf` Receiver. It uses the `DirectReceiver` type:
 
-```yaml
+``` yaml
   airspyhf:
     type: "DirectReceiver"
     decoder:
@@ -292,7 +313,7 @@ This example is the default definition of the `airspyhf` Receiver. It uses the `
 
 Many of the entries have already been covered, but there are a couple of new ones.
 
-- `sample-rates` - a list of the sample rates (samples per second, or Hz) supported by this profile. It needs to be values that the radio actually supports, but does not need to be all of them (for example, if you know your system has issues with higher sample rates, you could omit them). See "ranges" discussed above.
+- `sample-rates` - a list of the sample rates (samples per second, or Hz) supported by this profile. It needs to be values that the radio actually supports, but does not need to be all of them (for example, if you know your system has issues with higher sample rates, you could omit them). See “ranges” discussed above.
 - `soapysdr` - this is a sub section that defines the SoapySDR arguments that `dumphfdl` will need to configure the radio. The properties in this section vary from driver to driver. You can check with `SoapySDRUtil --probe` to see what properties might be applicable here. The predefined HFDLObserver receivers have reasonable defaults for many of them.
 - `soapysdr` § `driver` is common so that `dumphfdl` knows which SoapySDR driver/library to load for this radio.
 - `soapysdr` § `gain` - for the `airspyhf` SoapySDR driver, the `gain` argument is accepted. If `None` (the default), AGC is enabled. Otherwise, it will be a value that is supported by the device (different devices will have different ranges).
@@ -303,13 +324,13 @@ A dummy development Receiver type for implementing the `dummy` template describe
 
 #### `receiver` § `type: Web888PipeReceiver`
 
-The backing type for the `pipe888` template described above. It uses all the same settings as `Web888ExecReceiver`. It also may have incomplete functionality. It's included here for some attempt at completeness.
+The backing type for the `pipe888` template described above. It uses all the same settings as `Web888ExecReceiver`. It also may have incomplete functionality. It’s included here for some attempt at completeness.
 
 ### `dumphfdl`
 
 This section defines the various profiles that can be used by receivers to configure the `dumphfdl` component. Similar to receivers, each profile is named. These names can be referenced in `reciever` § `decoder` sections, or other `dumphfdl` profiles (for a simplistic form of inheritance/extension).
 
-```yaml
+``` yaml
 dumphfdl:
   default:
     quiet: yes
@@ -329,21 +350,21 @@ dumphfdl:
 
 This is a fairly complete example of a basic `dumphfdl` profile named `default`. As noted above, special receiver types can add further properties to this. The additional configuration is usually handled as override properties in the `receiver` § `decoder` section.
 
-- `quiet` - `yes`/`no` (or similar values, see above). If `yes`, only more important messages from `dumphfdl` will be relayed to `HFDLObserver`'s logs.
+- `quiet` - `yes`/`no` (or similar values, see above). If `yes`, only more important messages from `dumphfdl` will be relayed to `HFDLObserver`’s logs.
 - `decoder_path` - if you have a custom build of `dumphfdl` and want to use it for in receivers that reference this profile, you can put the path here. The path is relative to the config file. It is recommended to use an absolute path if the executable is not on the PATH. The default just looks for `dumphfdl` on the system PATH.
-- `shoulder` - this is the factor to apply to a receiver's sample rate to determine the actual usable sample rate. Some radios introduce filters that attenuate some signals at the upper and lower ends of the sampling window. This parameter identifies how much of the sample window is considered "passed". This is not needed for Web-888 profiles.
+- `shoulder` - this is the factor to apply to a receiver’s sample rate to determine the actual usable sample rate. Some radios introduce filters that attenuate some signals at the upper and lower ends of the sampling window. This parameter identifies how much of the sample window is considered “passed”. This is not needed for Web-888 profiles.
 - `system_table` - passed to `dumphfdl` as the `--system-table` parameter.
 - `system_table_save` - passed to `dumphfdl` as the `--system-table-save` parameter.
-- `station_id` - passed to `dumphfdl` as the `--station-id` parameter. It is also used to identify packets collected by this "agent" within HFDLObserver. It is optional, but highly recommended. There is no default.
-- `airframes_enabled` - `yes`/`no` (or similar values, see above). The default is `yes`. If this is `yes` and `station_id` is also defined, a `dumphfdl` output for airframes will automatically be generated. You can disable this if you are using a relay or router to pass packets on to airframes and don't need HFDLObserver to communicate with airframes directly.
+- `station_id` - passed to `dumphfdl` as the `--station-id` parameter. It is also used to identify packets collected by this “agent” within HFDLObserver. It is optional, but highly recommended. There is no default.
+- `airframes_enabled` - `yes`/`no` (or similar values, see above). The default is `yes`. If this is `yes` and `station_id` is also defined, a `dumphfdl` output for airframes will automatically be generated. You can disable this if you are using a relay or router to pass packets on to airframes and don’t need HFDLObserver to communicate with airframes directly.
 - `output` - a list of **output** profiles. These are described below. They operate in the same way as receivers and dumphfdl, in that you name an output (in this example `"acarshub"`), and can also override properties from the profile.
-- `packetlog` - an optional path to a directory or file. If present (by default it is not), this will be used to generate an `--output` to log the packets to that file in JSON format, rotated daily. The usual usage is to specify a directory. HFDLObserver will use the receiver's name to generate the actual file name used within that directory.
+- `packetlog` - an optional path to a directory or file. If present (by default it is not), this will be used to generate an `--output` to log the packets to that file in JSON format, rotated daily. The usual usage is to specify a directory. HFDLObserver will use the receiver’s name to generate the actual file name used within that directory.
 
 ### `output`
 
-This section defines output profiles that `dumphfdl` profiles use to configure `decoder`s in `receiver`s. In general, they follow the pattern of the `--output` parameter of `dumphfdl`. Not all of dumphfdl's output types are supported. Only `decoded` outputs are supported (not `raw`).
+This section defines output profiles that `dumphfdl` profiles use to configure `decoder`s in `receiver`s. In general, they follow the pattern of the `--output` parameter of `dumphfdl`. Not all of dumphfdl’s output types are supported. Only `decoded` outputs are supported (not `raw`).
 
-```yaml
+``` yaml
 outputs:
   acars_router:
     format: "json"
@@ -352,7 +373,7 @@ outputs:
     port: 5556
 ```
 
-This is a typical `output` profile, named `acars_router`. 
+This is a typical `output` profile, named `acars_router`.
 
 - `format` - the `dumphfdl` output format. `json` is default, but `basestation` is also supported. `text` may also work.
 - `protocol` - the `dumphfdl` network protocol. `udp` and `tcp` are supported. *Note* neither `file`, nor `zmq` are supported.
@@ -367,9 +388,9 @@ Several basic output profiles are provided, so you can include them and only ove
 
 ### `db`
 
-In almost all situations, the in-memory tracking of packets for the display is sufficient. However, it is possible to configure HFDLObserver to persist its internal database to your machine's storage. This is configured via the `db` section.
+In almost all situations, the in-memory tracking of packets for the display is sufficient. However, it is possible to configure HFDLObserver to persist its internal database to your machine’s storage. This is configured via the `db` section.
 
-```yaml
+``` yaml
 db:
   uri: hfdlobserver.db
   horizon: 7
@@ -378,22 +399,21 @@ db:
 **If you are using a system with an SDCard (or EMMC) as primary storage, you almost certainly do not want to do this**
 
 - `uri`: the filename or SQLite URI for the database. If absent, uses an in-memory database. A raw filename is also accepted.
-- `horizon`: the number of _days_ of history to keep. Specify a negative number to keep data with no limits.
+- `horizon`: the number of *days* of history to keep. Specify a negative number to keep data with no limits.
 
 If the `horizon` is at least 7, an additional number is added to the total packets count, representing the packet count for the last 7 days.
 
-
 ## Abbreviated Settings Examples
 
-The following sections provide some abbreviated samples of various configurations that may be of interest. These are not complete examples. They focus on the important differences from a "vanilla" configuration. Where you see `...` in the example, this is where you would put elements from the vanilla or your own customized settings.
+The following sections provide some abbreviated samples of various configurations that may be of interest. These are not complete examples. They focus on the important differences from a “vanilla” configuration. Where you see `...` in the example, this is where you would put elements from the vanilla or your own customized settings.
 
 Annotations are included as `#` comments.
 
 ### tandem
 
-It is possible to use more than one connected Web-888 device. You'll want to create a second web-888 receiver type, but it's easy base it on the existing one, changing only what is needed (most likely just the address):
+It is possible to use more than one connected Web-888 device. You’ll want to create a second web-888 receiver type, but it’s easy base it on the existing one, changing only what is needed (most likely just the address):
 
-```yaml
+``` yaml
 receivers:
   web888-1:  # This configures receivers using the first device
     receiver: web888
@@ -474,9 +494,9 @@ cui: ...  # your UI settings, if non-default.
 
 ### alpha web-888 roms
 
-Current (2025 May) Web-888 development/alpha firmware images include the ability to configure wider channels (24kHz and 36kHz). For now, the 36kHz configuration appears to have some issues with IQ streams, but 24kHz channels is supported. To enable the wider channels, you need to go to the Admin interface on the Web-888 device, navigate to the Control tab, and select the value from the "RX Bandwidth" drop down. The device will need to restart after wards. You can then make a very simple modification to the default/vanilla `settings.yaml`:
+Current (2025 May) Web-888 development/alpha firmware images include the ability to configure wider channels (24kHz and 36kHz). For now, the 36kHz configuration appears to have some issues with IQ streams, but 24kHz channels is supported. To enable the wider channels, you need to go to the Admin interface on the Web-888 device, navigate to the Control tab, and select the value from the “RX Bandwidth” drop down. The device will need to restart after wards. You can then make a very simple modification to the default/vanilla `settings.yaml`:
 
-```yaml
+``` yaml
 receivers:
   web888-24:  # It's not a good idea to use the same name as a default profile. It *might* work, but it is not supported.
     receiver: web888  # Extends the default web888 profile
@@ -517,13 +537,13 @@ observer:
 
 ### wide888
 
-One of the [airframes.io](https://airframes.io/) contributors has created a [custom Web-888 firmware image](https://github.com/rpatel3001/red-pitaya-notes) based on the red-pitaya-notes image. It exposes wider channels than the normal firmware, and enough of them to cover every single allocated HFDL frequency simultaneously. It is not *quite* a drop in replacement. It has quirks and does not have the same control UI as the "official" images. Using the wider channels provided by this image requires rather more CPU and it is likely not suited for a Pi level device. Your Mileage May Vary.
+One of the [airframes.io](https://airframes.io/) contributors has created a [custom Web-888 firmware image](https://github.com/rpatel3001/red-pitaya-notes) based on the red-pitaya-notes image. It exposes wider channels than the normal firmware, and enough of them to cover every single allocated HFDL frequency simultaneously. It is not *quite* a drop in replacement. It has quirks and does not have the same control UI as the “official” images. Using the wider channels provided by this image requires rather more CPU and it is likely not suited for a Pi level device. Your Mileage May Vary.
 
-If this image is of interest, the developer (and myself, too) hang out in the HFDL channel on the [Airframes Discord](https://discord.gg/airframes), and you can get assistance there in getting this image set up correctly -- it's not difficult, but there aren't any instructions or documentation for this particular variant image.
+If this image is of interest, the developer (and myself, too) hang out in the HFDL channel on the [Airframes Discord](https://discord.gg/airframes), and you can get assistance there in getting this image set up correctly – it’s not difficult, but there aren’t any instructions or documentation for this particular variant image.
 
-The custom HDFLObserver settings for this configuration is very similar to the *alpha web-888 roms* section above (the compatibility is what makes this image exciting!)...
+The custom HDFLObserver settings for this configuration is very similar to the *alpha web-888 roms* section above (the compatibility is what makes this image exciting!)…
 
-```yaml
+``` yaml
 receivers:
   wide888:
     receiver: web888
@@ -597,7 +617,7 @@ observer:
 
 TBD
 
-## Running as a remote "node"
+## Running as a remote “node”
 
 TBD
 
@@ -605,12 +625,13 @@ TBD
 
 These are definitely use at your own discretion, and are not officially supported. They are subject to change without and backwards compatibility.
 
-### type: static (Experimental)
+### `type: static` (Experimental)
 
 Setting `conductor`/`type: static` in your `settings.yaml` allows you to specify exactly what frequencies each receiver will listen to. This applies to local and remote receivers. You set the static list of frequencies via the `static_allocations` setting
 
 Example:
-```yaml
+
+``` yaml
   conductor:
     type: static
     static_allocations:
@@ -631,20 +652,21 @@ Example:
       'web888-12': [3016]
 ```
 
-HFDLObserver does not check whether the allocations make sense. If you try to assign frequencies that exceed the receiver's sample window, you will get errors, and the receiver will not be used. If you specify a receiver name that does not exist, the allocations will be ignored. If you don't specify an allocation for a receiver in the receivers list, that receiver will be assigned no frequencies. These allow (remote) receivers to connect and disconnect.
+HFDLObserver does not check whether the allocations make sense. If you try to assign frequencies that exceed the receiver’s sample window, you will get errors, and the receiver will not be used. If you specify a receiver name that does not exist, the allocations will be ignored. If you don’t specify an allocation for a receiver in the receivers list, that receiver will be assigned no frequencies. These allow (remote) receivers to connect and disconnect.
 
 You are responsible for generating the list of frequencies; `type: static` does not assist you in any way.
 
-### type: bfi (Experimental)
+### `type: bfi` (Experimental)
 
 Setting `conductor`/`type: bfi` in your `settings.yaml` disables most channel allocation logic. Instead of considering exclusions, squitters, and station rankings, HFDLObserver will try to blindly allocate as many official frequencies (active and inactive) as will fit into receivers.
 
 Example:
-```yaml
+
+``` yaml
   conductor:
     type: static
 ```
 
-Using this may be interesting if you have enough receivers configured to cover all frequencies. Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies. As this method ignores station preferences and current active frequencies, the list of allocation is "more stable", but is of little use, as there's no guarantee that any active frequencies will be assigned.
+Using this may be interesting if you have enough receivers configured to cover all frequencies. Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies. As this method ignores station preferences and current active frequencies, the list of allocation is “more stable”, but is of little use, as there’s no guarantee that any active frequencies will be assigned.
 
-`pandoc --columns 120 -t gfm --reference-location=document --toc -s`
+`pandoc --wrap=preserve -t gfm --reference-location=document --toc -s -o extras/advanced-settings.md extras/advanced-settings.md`
