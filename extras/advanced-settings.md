@@ -494,7 +494,7 @@ cui: ...  # your UI settings, if non-default.
 
 ### alpha web-888 roms
 
-Current (2025 May) Web-888 development/alpha firmware images include the ability to configure wider channels (24kHz and 36kHz). For now, the 36kHz configuration appears to have some issues with IQ streams, but 24kHz channels is supported. To enable the wider channels, you need to go to the Admin interface on the Web-888 device, navigate to the Control tab, and select the value from the “RX Bandwidth” drop down. The device will need to restart after wards. You can then make a very simple modification to the default/vanilla `settings.yaml`:
+Web-888 development/alpha firmware images after April 2025 include the ability to configure wider channels (24kHz and 36kHz). For now, the 36kHz configuration appears to have some issues with IQ streams, but 24kHz channels is supported. To enable the wider channels, you need to go to the Admin interface on the Web-888 device, navigate to the Control tab, and select the value from the “RX Bandwidth” drop down. The device will need to restart after wards. You can then make a very simple modification to the default/vanilla `settings.yaml`:
 
 ``` yaml
 receivers:

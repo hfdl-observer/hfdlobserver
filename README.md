@@ -2,9 +2,38 @@
 
 A multi-headed dumphfdl receiver for use with Web-888 devices and other SoapySDR-compatible receivers.
 
-> [!IMPORTANT]
-> If you are currently using a version from this repository when the main script was called `hfdlobserver888.sh`, see the next to last section of this document: *Upgrading from HFDLObserver888* for important information. This version is not directly compatible with the settings and environment of the `HFDLObserver888.sh` installation. You will have to perform a migration step.
+- [HFDLObserver](#hfdlobserver)
+  - [Background](#background)
+    - [RX-888](#rx-888)
+  - [Features](#features)
+    - [Web-888 receivers](#web-888-receivers)
+    - [Other radios](#other-radios)
+    - [Airsphy HF+ range](#airsphy-hf-range)
+    - [SDRPlay devices](#sdrplay-devices)
+    - [RX-888mk2](#rx-888mk2)
+  - [Advanced Features](#advanced-features)
+    - [Other SoapySDR devices](#other-soapysdr-devices)
+    - [Remote Devices](#remote-devices)
+    - [Receiver-less operation](#receiver-less-operation)
+  - [CUI](#cui)
+    - [Space Weather](#space-weather)
+    - [Cumulative Stats](#cumulative-stats)
+    - [Command Keys](#command-keys)
+  - [Setting up the Web-888](#setting-up-the-web-888)
+    - [Control Tab](#control-tab)
+    - [Config Tab](#config-tab)
+    - [Public Tab](#public-tab)
+  - [Installation](#installation)
+    - [Breakdown](#breakdown)
+  - [Configuration](#configuration)
+  - [Running](#running)
+  - [Exiting](#exiting)
+  - [Run as a Service (very alpha)](#run-as-a-service-very-alpha)
+  - [Upgrading from HFDLObserver888](#upgrading-from-hfdlobserver888)
+  - [Acknowledgements](#acknowledgements)
 
+> \[!IMPORTANT\]
+> If you are currently using a version from this repository when the main script was called `hfdlobserver888.sh`, see the next to last section of this document: *Upgrading from HFDLObserver888* for important information. This version is not directly compatible with the settings and environment of the `HFDLObserver888.sh` installation. You will have to perform a migration step.
 
 ## Background
 
@@ -28,19 +57,19 @@ In general, there are around 30 frequencies active globally at a given time.
 
 ### Web-888 receivers
 
-It assigns frequencies to each of 13 virtual "receivers". The assignments are based on a list of currently active frequencies ranked by a user-configured station preference (generally stations nearer your Web-888 should have higher preference).
+It assigns frequencies to each of 13 virtual “receivers”. The assignments are based on a list of currently active frequencies ranked by a user-configured station preference (generally stations nearer your Web-888 should have higher preference).
 
 It manages the `kiwirecorder` web socket clients that stream the raw data from Web-888 for each virtual receiver. It also manages the `dumphfdl` processes used to decode HFDL from the raw I/Q data `kiwirecorder` emits.
 
 It watches the decoded HFDL packets for frequency updates. When the active frequency list changes, virtual receivers may be reassigned to higher-priority frequencies.
 
-Processing the entire HF frequency space would be very CPU-intensive. Taking advantage of the FPGA in Web-888 to select only the portions we're interested in means:
+Processing the entire HF frequency space would be very CPU-intensive. Taking advantage of the FPGA in Web-888 to select only the portions we’re interested in means:
 
 - The data rate from the Web-888 to the device running HFDLObserver is around 5Mbps.
 - The aggregate bandwidth that needs to be scanned by all virtual receivers is around 156kHz.
 - The CPU required for the virtual receivers is about ½ of 1 core of an Odroid M1S or Raspberry Pi4 (~13% total CPU)
 
-HFDLObserver allows your station to monitor (typically) 18-23 active HFDL frequencies on a single Web-888 appliance. In addition, where possible, HFDLObserver will watch neighbouring inactive but assigned frequencies. These "extras" typically add little if anything to packet counts, but contribute to completeness.
+HFDLObserver allows your station to monitor (typically) 18-23 active HFDL frequencies on a single Web-888 appliance. In addition, where possible, HFDLObserver will watch neighbouring inactive but assigned frequencies. These “extras” typically add little if anything to packet counts, but contribute to completeness.
 
 ### Other radios
 
@@ -59,15 +88,13 @@ Current known working SDRPlay devices are:
 
 ### RX-888mk2
 
-As mentioned above, this is a great wideband SDR receiver. Its Linux driver support is not great, but the SoapySDR driver in the [ExtIO_sddc](https://github.com/ik1xpv/ExtIO_sddc) project works with HFDLObserver and `dumphfdl` fairly well. For reasons not currently understood by HFDLObserver, this driver and `dumphfdl` fail to work together above 8MS/s. But that's still a nice wide bandwidth.
-
+As mentioned above, this is a great wideband SDR receiver. Its Linux driver support is not great, but the SoapySDR driver in the [ExtIO_sddc](https://github.com/ik1xpv/ExtIO_sddc) project works with HFDLObserver and `dumphfdl` fairly well. For reasons not currently understood by HFDLObserver, this driver and `dumphfdl` fail to work together above 8MS/s. But that’s still a nice wide bandwidth.
 
 ## Advanced Features
 
-HFDLObserver is evolving software. As such, it has some more advanced features that are in various stages of stability, and which generally require more expert handling for the time being. If you want to try to use one of these, drop by the [Airframes.io](https://airframes.io) Discord, in the "#𝐇𝐅〉hfdl" channel.
+HFDLObserver is evolving software. As such, it has some more advanced features that are in various stages of stability, and which generally require more expert handling for the time being. If you want to try to use one of these, drop by the [Airframes.io](https://airframes.io) Discord, in the “\#𝐇𝐅〉hfdl” channel.
 
 Additional topics, such as details of most of the available settings can be found in the [Advanced Topics](extras/advanced-settings.md) documentation.
-
 
 ### Other SoapySDR devices
 
@@ -75,12 +102,11 @@ Hypothetically, any device with a SoapySDR driver should be usable under HFDLObs
 
 ### Remote Devices
 
-An experimental addition to HFDLObserver is a simple network protocol for managing devices running on other "nodes" (computers). This allows you to spread high bandwidth devices across your home network. This involves installing HFDLObserver on those computers and running them in a special "node" mode. While it requires only settings changes, they're not currently documented well (coming eventually).
+An experimental addition to HFDLObserver is a simple network protocol for managing devices running on other “nodes” (computers). This allows you to spread high bandwidth devices across your home network. This involves installing HFDLObserver on those computers and running them in a special “node” mode. While it requires only settings changes, they’re not currently documented well (coming eventually).
 
 ### Receiver-less operation
 
-If you just want to use the CUI (especially the heat map) to monitor the output of many SDRs you're managing some other way, this is also possible (and not even that advanced, really). HFDLObserver gathers its packet information over a UDP port from the various decoders (`dumphfdl`) and there's no actual need for HFDLObserver to control any of the receivers itself.
-
+If you just want to use the CUI (especially the heat map) to monitor the output of many SDRs you’re managing some other way, this is also possible (and not even that advanced, really). HFDLObserver gathers its packet information over a UDP port from the various decoders (`dumphfdl`) and there’s no actual need for HFDLObserver to control any of the receivers itself.
 
 ## CUI
 
@@ -88,24 +114,28 @@ HFDLObserver also adds a simple but rich console-based display. At the top is a 
 
 This is a bit more CPU intensive. On a web-888 connected system, it takes about the same CPU as all of the virtual receivers combined. It can be disabled, and is disabled by default when it is run as a (systemd) service.
 
-The packet count from each bin is represented by `1` to `9`, then by `a` to `z` for 10 through 35, and `A` to `Z` for 36 through 61. The default bin size is 60 seconds, and it's highly unlikely you'll ever see anything above that. However, if you configure the bin size manually, you will see `✽` for such packet counts. The bin background is coloured based on the packet count, from blue through green, yellow, orange, red, and magenta to purple. This scales with the maximum packet count needed, so even when you have max packet counts, you will have *some* indication of relative density.
+The packet count from each bin is represented by `1` to `9`, then by `a` to `z` for 10 through 35, and `A` to `Z` for 36 through 61. The default bin size is 60 seconds, and it’s highly unlikely you’ll ever see anything above that. However, if you configure the bin size manually, you will see `✽` for such packet counts. The bin background is coloured based on the packet count, from blue through green, yellow, orange, red, and magenta to purple. This scales with the maximum packet count needed, so even when you have max packet counts, you will have *some* indication of relative density.
 
-![HFDL Observer CUI](https://github.com/user-attachments/assets/276c540b-e8ab-4bff-a726-35f77d24344f)
-
+<figure>
+<img src="https://github.com/user-attachments/assets/276c540b-e8ab-4bff-a726-35f77d24344f" alt="HFDL Observer CUI" />
+<figcaption aria-hidden="true">
+HFDL Observer CUI
+</figcaption>
+</figure>
 
 ### Space Weather
 
-On the top line is the current up time for the app. To its left is the current Space Weather dashboard. It is the same data shown on the [NOAA Space Weather Enthusiats Dashboard](https://www.swpc.noaa.gov/communities/space-weather-enthusiasts-dashboard). There's an explanation of the scales there. This is useful for a quick glance to diagnose reception issues. They are a bit condensed here. In each group:
+On the top line is the current up time for the app. To its left is the current Space Weather dashboard. It is the same data shown on the [NOAA Space Weather Enthusiats Dashboard](https://www.swpc.noaa.gov/communities/space-weather-enthusiasts-dashboard). There’s an explanation of the scales there. This is useful for a quick glance to diagnose reception issues. They are a bit condensed here. In each group:
 
 - R = Radio Blackouts
 - S = Solar Radiation Impact
 - G = Geomagnetic Storm Impact
 
-`R2|S0|G0` The first group describes the recent (24h) maxima of indicators. Generally if there is a number higher than 0 in any of these, especially "R", that may explain unusual reception numbers in the recent past.
+`R2|S0|G0` The first group describes the recent (24h) maxima of indicators. Generally if there is a number higher than 0 in any of these, especially “R”, that may explain unusual reception numbers in the recent past.
 
-`R0|S0|G0` The second group describes "current" conditions. Note that this isn't always completely relevant to your precise location given the rotation of the earth.
+`R0|S0|G0` The second group describes “current” conditions. Note that this isn’t always completely relevant to your precise location given the rotation of the earth.
 
-`R70/30|S15|G0` This is a forecast for the next 24 hours. The "R" number gives the percent chance for "major" and "minor" events. The "S" number gives a percent chance for the "S" rating to rise above 0. The "G" number is the forecast level of Geomagnetic Storm Impact (this is the level, not a probability).
+`R70/30|S15|G0` This is a forecast for the next 24 hours. The “R” number gives the percent chance for “major” and “minor” events. The “S” number gives a percent chance for the “S” rating to rise above 0. The “G” number is the forecast level of Geomagnetic Storm Impact (this is the level, not a probability).
 
 ### Cumulative Stats
 
@@ -118,7 +148,6 @@ The next line provides an overview of the total stats since the app started.
 - 📰 squitter (network update) packets received
 - 🔎 number of frequencies being observed out of the total active frequencies
 - 📶 total number of packets (The number first is the packets since the app was last started. The second is the total packets in the last day. See also the Advanced Settings document for further options.)
-
 
 ### Command Keys
 
@@ -136,41 +165,38 @@ The HFDLObserver CUI allows limited control of the display at runtime with a few
 - `[h]` - this help
 - `[q]` or `[^C]` - quit
 
-
 ## Setting up the Web-888
 
-To start, follow the [basic set up instructions](https://www.rx-888.com/web/guide/requirements.html) on the Web-888 site. You'll need to put the ROM image on a micro-SD card. There's little activity and little use of space, so you should not go overboard on a card (in fact, don't use anything 32GB or larger, as the device will be unable to read it).
+To start, follow the [basic set up instructions](https://www.rx-888.com/web/guide/requirements.html) on the Web-888 site. You’ll need to put the ROM image on a micro-SD card. There’s little activity and little use of space, so you should not go overboard on a card (in fact, don’t use anything 32GB or larger, as the device will be unable to read it).
 
-You do not have to configure any of the "public" options -- you aren't going to be sharing this device to the public. You should make sure its location is configured correctly, though. This can be done automatically if you've attached a GPS antenna.
+You do not have to configure any of the “public” options – you aren’t going to be sharing this device to the public. You should make sure its location is configured correctly, though. This can be done automatically if you’ve attached a GPS antenna.
 
 There are only a few settings that are of interest.
 
 ### Control Tab
 
 - `HF Bandwidth Selection`: select 32M. Using 64M will disable 1 channel (leaving only 12).
+- `RX Bandwidth`: The default configuration assumes 12kHz, but 24kHz is also available if you use an alpha ROM image and [make some minor configuration changes](extras/advanced-settings.md#alpha-web-888-roms).
 - `Disable waterfalls/spectrum?`: YES. No web clients will be using this device, and you can save a bit of processing power.
-- `Switch between HF or Air Band`: Select HF
+- `Switch between HF or Air Band`: Select HF.
 
 ### Config Tab
 
-- `Enable ADC PGA?`: your choice. It's safe to try either for a period.
+- `Enable ADC PGA?`: your choice. It’s safe to try either for a period.
 - `Correct ADC clock by GPS PPS`: YES if you have a GPS antenna connected.
 - `Enable ADC Dithering`: NO. This does not help the I/Q processing dumphfdl does.
 
 ### Public Tab
 
-- `Register on www.rx-888.com/web/rx?`: NO. You're using this device exclusively for your own private use. Even if you need to access it over public Internet, you don't need it to register with the available public servers.
-
+- `Register on www.rx-888.com/web/rx?`: NO. You’re using this device exclusively for your own private use. Even if you need to access it over public Internet, you don’t need it to register with the available public servers.
 
 ## Installation
 
 Installation can be performed on `apt`-equipped systems (Debian, Ubuntu, Armbian, etc.) by using the provided `install.sh` command. The installation requires `sudo` access so that it can install packages and dependencies.
 
-```
-$ git clone https://github.com/hfdl-observer/hfdlobserver
-$ cd hfdlobserver
-$ ./install.sh
-```
+    $ git clone https://github.com/hfdl-observer/hfdlobserver
+    $ cd hfdlobserver
+    $ ./install.sh
 
 Formal releases are not made at this time, so `main` off of the repository is the best source. Releases will come eventually.
 
@@ -178,16 +204,16 @@ Formal releases are not made at this time, so `main` off of the repository is th
 
 The install script automates the following steps:
 
-1. Installing necessary basic packages: `whiptail python3 python3-venv git`
-2. Set up a virtual environment, and activate it.
-3. Install Python requirements (from `requirements.txt`) into the virtual environment using `pip`.
-4. Download `kiwiclient` to a known location.
-5. Install `dumphfdl` (and dependencies)
-   1. Install package dependencies: `build-essential cmake pkg-config libglib2.0-dev libconfig++-dev libliquid-dev libfftw3-dev zlib1g-dev libxml2-dev libjansson-dev`
-   2. clone `libacars`, build, and install it.
-   3. clone `statsd-c-client`, build, and install it.
-   4. clone `dumphfdl`, build, and install it.
-6. Run `./configure.py` to walk through some simple configuration questions.
+1.  Installing necessary basic packages: `whiptail python3 python3-venv git`
+2.  Set up a virtual environment, and activate it.
+3.  Install Python requirements (from `requirements.txt`) into the virtual environment using `pip`.
+4.  Download `kiwiclient` to a known location.
+5.  Install `dumphfdl` (and dependencies)
+    1.  Install package dependencies: `build-essential cmake pkg-config libglib2.0-dev libconfig++-dev libliquid-dev libfftw3-dev zlib1g-dev libxml2-dev libjansson-dev`
+    2.  clone `libacars`, build, and install it.
+    3.  clone `statsd-c-client`, build, and install it.
+    4.  clone `dumphfdl`, build, and install it.
+6.  Run `./configure.py` to walk through some simple configuration questions.
 
 While several helper programs are installed, they are invoked via the operating system, HFDLObserver makes no alteration to any of their code or operations, and connects only through standard mechanisms (file handles and sockets).
 
@@ -201,62 +227,52 @@ You can rerun the configuration script at any time by running `hfdlobserver.sh c
 
 The configuration tool provides two options for setting the ranked order of HFDL stations.
 
-1. You can provide a comma-separated list of station IDs. You can see the station IDs and some related information at the [HFDL.observer](https://hfdl.observer) site.
+1.  You can provide a comma-separated list of station IDs. You can see the station IDs and some related information at the [HFDL.observer](https://hfdl.observer) site.
 
-2. The configuration tool can "guess" the station ranking. It builds this list using distance from your Web-888's location. You will have to enter it. Generally entering just the rounded degrees latitude and longitude should be sufficient.
+2.  The configuration tool can “guess” the station ranking. It builds this list using distance from your Web-888’s location. You will have to enter it. Generally entering just the rounded degrees latitude and longitude should be sufficient.
 
 The distance tool is also available as
 
-```
-$ extras/guess_station_ranking.py <lat> <lon>
-```
+    $ extras/guess_station_ranking.py <lat> <lon>
 
 ## Running
 
 Once configured, you can run the receiver by
 
-```
-$ <path-to>/hfdlobserver.sh
-```
+    $ <path-to>/hfdlobserver.sh
 
-if you do not want the "fancy" TUI, pass in the `--headless` option. The usage is minimal, but is explained with `--help`.
+if you do not want the “fancy” TUI, pass in the `--headless` option. The usage is minimal, but is explained with `--help`.
 
 Hopefully, it should Just Work.
 
 In case of abnormal termination, you should kill any `kiwirecorder.py` and `dumphfdl` instances that may be left hanging. This can be accomplished with the following:
 
-```
-$ pkill -f kiwirecorder ; pkill -f dumphfdl
-```
+    $ pkill -f kiwirecorder ; pkill -f dumphfdl
 
 ## Exiting
 
-Press `^C` (control + C). Enhance your calm, as it can take several seconds to shut down cleanly. At present, seeing exception traces at exit is not unusual; don't worry as these are normally harmless.
+Press `^C` (control + C). Enhance your calm, as it can take several seconds to shut down cleanly. At present, seeing exception traces at exit is not unusual; don’t worry as these are normally harmless.
 
 ## Run as a Service (very alpha)
 
 If you want to run this as a service, you can run the script to install the service file for systemd.
 
-```
-$ extras/install-service.sh
-```
+    $ extras/install-service.sh
 
 It then becomes a normal service named `hfdlobserver`. Following the usual pattern, there is a very minor ability to configure it via `/etc/default/hfdlobserver`, but most items are managed through the `settings.yaml` file.
-
 
 ## Upgrading from HFDLObserver888
 
 The original versions of HFDLObserver (as `HFDLObserver888`) use a different structure for settings. Additionally, this new version adds some dependencies. If you are using the older version and want to update (recommended!) you need to perform a couple of steps
 
-1. **save your original `settings.yaml` some place, just in case.**
-2. stop any current `hfdlobserver888` instances that are running on the machine.
-3. `cd` into the install directory.
-4. use `git pull` to update the code.
-5. run `extras/migrate-from-888.sh`
-6. run `./hfdlobserver.sh configure`
-7. copy `settings.yaml.new` to `settings.yaml` (if you have been using a simple setup)
-8. run `./hfdlobserver.sh` to enjoy the new code.
-
+1.  **save your original `settings.yaml` some place, just in case.**
+2.  stop any current `hfdlobserver888` instances that are running on the machine.
+3.  `cd` into the install directory.
+4.  use `git pull` to update the code.
+5.  run `extras/migrate-from-888.sh`
+6.  run `./hfdlobserver.sh configure`
+7.  copy `settings.yaml.new` to `settings.yaml` (if you have been using a simple setup)
+8.  run `./hfdlobserver.sh` to enjoy the new code.
 
 ## Acknowledgements
 
@@ -265,3 +281,5 @@ The original versions of HFDLObserver (as `HFDLObserver888`) use a different str
 - [airframes.io](https://airframes.io/) - a great community of people interested in data from the sky.
 - [libacars](https://github.com/szpajder/libacars) - used by dumphfdl to parse ACARS data from HFDL packets
 - [stats-d-client](https://github.com/romanbsd/statsd-c-client.git) - used to optionally send statsd statistics.
+
+`pandoc --wrap=preserve -t gfm --reference-location=document --toc -s -o README.md README.md`
