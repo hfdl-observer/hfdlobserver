@@ -664,7 +664,7 @@ Example:
 
 ``` yaml
   conductor:
-    type: static
+    type: bfi
 ```
 
 Using this may be interesting if you have enough receivers configured to cover all frequencies. Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies. As this method ignores station preferences and current active frequencies, the list of allocation is “more stable”, but is of little use, as there’s no guarantee that any active frequencies will be assigned.
