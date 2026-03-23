@@ -312,6 +312,16 @@ class CumulativePacketStats(bus.EventNotifier):
             self.no_position += 1
         self.notify_event("update", self)
 
+    def as_dict(self) -> dict:
+        return {
+            "packets": self.packets,
+            "from_air": self.from_air,
+            "from_ground": self.from_ground,
+            "with_position": self.with_position,
+            "no_position": self.no_position,
+            "squitters": self.squitters,
+        }
+
 
 class StationLookup:
     by_id: dict[int, Station]

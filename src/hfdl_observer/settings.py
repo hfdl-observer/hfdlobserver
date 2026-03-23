@@ -168,7 +168,8 @@ defaults: dict[str, Any] = {
             "show_confidence": True,
             "show_targetting": False,
             "flexible_width": False,
-        }
+        },
+        "secondary_displays": [],
     },
     "node": {"local_receivers": [], "messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},
     "viewer": {"messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},

@@ -36,6 +36,7 @@ import hfdl_observer.settings as settings
 import hfdl_observer.util as util
 
 import hfdlobserver
+import jsonui
 
 logger = logging.getLogger(__name__)
 start = datetime.datetime.now()
@@ -105,6 +106,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         self.update_status()
         self.update_tty_bar()
         self.keyboard = self.setup_keyboard(keyboard)
+        self.secondary_displays = []
         forecaster.watch_event("response", self.on_forecast)
 
     def update(self) -> None:
@@ -186,6 +188,10 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             texts[-1] += f" {util.sparkline(self.spark_data)}"
         self.totals_text.plain = f"{' ⎮ '.join(texts)} "
 
+        for secondary in self.secondary_displays:
+            secondary.update_cumulative(self.cumulative_line, cumulative)
+
+
     def update_log(self, ring: collections.deque) -> None:
         # WARNING: do not use any logger from within this method.
         if self.tty:
@@ -220,6 +226,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
         self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
         self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
+        for secondary in self.secondary_displays:
+            secondary.update_counts(self.day_count, self.week_count, self.spark_data)
 
     def on_forecast(self, forecast: Any) -> None:
         try:
@@ -247,6 +255,10 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             (text.append(f"G{forecast1d['G']['Scale'] or '-'}", FORECAST_STYLEMAP[forecast1d["G"]["Text"]]),)
         except Exception as err:
             logger.debug("ignoring forecaster error", exc_info=err)
+
+        for secondary in self.secondary_displays:
+            secondary.update_forecast(forecast)
+
 
     @property
     def current_width(self) -> int:
@@ -276,6 +288,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             except IndexError:
                 break
             self.clear_table(garbage)
+        for secondary in self.secondary_displays:
+            secondary.update()
 
 
 @functools.cache
@@ -403,6 +417,16 @@ def exit(*_: Any) -> None:
     util.shutdown_event.set()
 
 
+def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
+    SECONDARY_TYPES = {
+        "web" : jsonui.ObserverDisplay,
+    }
+    if not (klass := SECONDARY_TYPES.get(config["type"])):
+        logger.warning(f'{config["type"]} is not a valid Secondary Display; ignoring.')
+        return None
+    return klass(config)
+
+
 def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
     cui_settings = settings.cui
     console = rich.console.Console()
@@ -421,6 +445,9 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
     forecaster = bus.RemoteURLRefresher("https://services.swpc.noaa.gov/products/noaa-scales.json", 617)
 
     display = ObserverDisplay(console, heatmap, keyboard, cumulative_line, forecaster)
+    for entry in cui_settings.get("secondary_displays", []):
+        if secondary := create_secondary(entry):
+            display.add_secondary(secondary)
 
     # setup logging
     logging_console.output = display.update_log

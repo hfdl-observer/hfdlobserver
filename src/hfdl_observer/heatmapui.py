@@ -56,13 +56,6 @@ def bin_symbol(amount: int) -> str:
     return "✽"
 
 
-class HeatMapConsumer:
-    current_width: int
-
-    def update_heatmap(self, heatmap_data: Sequence) -> None:
-        raise NotImplementedError()
-
-
 class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
     source: TableSourceT
     flexible_width: bool = True
@@ -136,6 +129,16 @@ class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
 
     def rows(self) -> Iterable[tuple[TableKeyT, Sequence[heat.Cell]]]:
         return list(row for row in self.source)
+
+
+class HeatMapConsumer:
+    current_width: int
+
+    def update_heatmap(self, heatmap_data: Sequence) -> None:
+        raise NotImplementedError()
+
+    def will_render(self, source: AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
+        pass
 
 
 class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequencyStation, tuple[int, int]]):
@@ -522,6 +525,8 @@ class HeatMap:
         if not source.is_empty:
             self.last_render_time = util.now()
             cells_visible = source.cells_visible(body_width)
+
+            self.display.will_render(source, cells_visible, bin_str)
 
             header_rows = self.render_column_headers(source, cells_visible, bin_str)
             table.extend(header_rows)

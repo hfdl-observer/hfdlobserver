@@ -139,6 +139,7 @@ class ReceivedPacket:
     longitude: Optional[float]
     receiver: str
     kind: Optional[str] = None
+    freq_active: Optional[bool] = None
 
 
 @dataclasses.dataclass

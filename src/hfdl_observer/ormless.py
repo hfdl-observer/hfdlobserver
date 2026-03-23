@@ -17,6 +17,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 import hfdl_observer.data as data
 import hfdl_observer.hfdl as hfdl
+import hfdl_observer.messaging as messaging
 import hfdl_observer.network as network
 import hfdl_observer.settings as settings
 import hfdl_observer.util as util
@@ -184,6 +185,7 @@ class ReceivedPacket(Table):
     latitude: float | None
     longitude: float | None
     receiver: str
+    freq_active: bool | None
 
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
@@ -199,9 +201,14 @@ class ReceivedPacket(Table):
                 latitude FLOAT NULL,
                 longitude FLOAT NULL,
                 receiver TEXT NOT NULL,
+                freq_active SMALLINT NULL,
                 PRIMARY KEY(received, frequency)
                 );
             """)
+            try:
+                conn.execute("ALTER TABLE ReceivedPacket ADD COLUMN freq_active SMALLINT NULL")
+            except sqlite3.Error:
+                logger.info("Not updating ReceivedPacket.")
             horizon_days = settings.db["horizon"]
             if horizon_days > 0:
                 horizon_ts = int(horizon_days * 86_400 * TS_FACTOR)
@@ -226,8 +233,8 @@ class ReceivedPacket(Table):
 
     def _add(self) -> bool:
         sql = "REPLACE INTO ReceivedPacket "
-        sql += "(received, agent, ground_station, frequency, kind, uplink, latitude, longitude, receiver) "
-        sql += "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);"
+        sql += "(received, agent, ground_station, frequency, kind, uplink, latitude, longitude, receiver, freq_active) "
+        sql += "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         with db() as conn:
             data = (
                 self.received,
@@ -239,6 +246,7 @@ class ReceivedPacket(Table):
                 self.latitude,
                 self.longitude,
                 self.receiver,
+                self.freq_active,
             )
             conn.execute(sql, data)
         return False
@@ -345,9 +353,10 @@ class PacketWatcher(data.AbstractPacketWatcher):
         util.schedule(self.add_packet(packet_info))
 
     async def add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> None:
-        await util.in_db_thread(self._add_packet, packet_info)
+        packet = await util.in_db_thread(self._add_packet, packet_info)
+        # messaging.publish_soon(util.Message('firehose', 'packet', packet))
 
-    def _add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> None:
+    def _add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> ReceivedPacket:
         position = packet_info.position or (None, None)
         packet = ReceivedPacket(
             received=to_timestamp(util.now()),
@@ -359,8 +368,10 @@ class PacketWatcher(data.AbstractPacketWatcher):
             latitude=position[0],
             longitude=position[1],
             receiver=network.receiver_for(packet_info.frequency),
+            freq_active=network.STATIONS[packet_info.ground_station["id"]].is_active(packet_info.frequency)
         )
         packet._add()
+        return packet
 
     def recent_packets(cls, since: datetime.datetime) -> Iterable[ReceivedPacket]:
         when = to_timestamp(since)
