@@ -537,6 +537,7 @@ table {
         refresh = f'<meta http-equiv="refresh" content="{self.refresh_delay}">' if self.refresh_delay > 1 else ""
         head = f"""
         <head>
+        <meta charset="UTF-8">
         <title>HFDLObserver</title>
         <style>{self.styles()}</style>
         {refresh}
@@ -559,7 +560,7 @@ class NaiveHandler(http.server.BaseHTTPRequestHandler, HTMLFormatter):
         url_lookup = {
             "/display.json": ("application/json", self.get_json_response),
             "/display.html": ("text/html; charset=utf-8", self.get_html_response),
-            "/": ("text/html", self.get_html_response),
+            "/": ("text/html; charset=utf-8", self.get_html_response),
         }
         logger.info(f"GET {self.path}")
         try:
