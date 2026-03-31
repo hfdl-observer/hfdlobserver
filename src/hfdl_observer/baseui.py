@@ -11,6 +11,7 @@ import logging
 from typing import Any, Optional, Sequence
 
 import hfdlobserver
+import hfdl_observer.bus as bus
 import hfdl_observer.heatmapui as heatmapui
 import hfdl_observer.network as network
 import hfdl_observer.util as util
@@ -61,6 +62,9 @@ class SecondaryObserverDisplay:
         raise NotImplementedError(self.__class__.__name__)
 
     def update(self) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def register(self, observer: bus.EventNotifier) -> None:
         raise NotImplementedError(self.__class__.__name__)
 
 

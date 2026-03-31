@@ -425,3 +425,34 @@ def sparkline(nums: Sequence[int]) -> str:
 def shutdown(*_: object, **__: object) -> None:
     shutdown_event.set()
     os.kill(os.getpid(), signal.SIGINT)
+
+
+def bearing(origin: tuple[float, float], destination: tuple[float, float]) -> float:
+    src_lat, src_lon = origin
+    dst_lat, dst_lon = destination
+    d_lon = math.radians(dst_lon - src_lon)
+    y = math.sin(d_lon) * math.cos(math.radians(dst_lat))
+    x = (
+        math.cos(math.radians(src_lat)) * math.sin(math.radians(dst_lat))
+        - math.sin(math.radians(src_lat)) * math.cos(math.radians(dst_lat)) * math.cos(d_lon)
+    )
+    heading = math.atan2(y, x)
+    heading = math.degrees(heading)
+    heading = (heading + 360) % 360
+    return heading
+
+
+def distance(origin: tuple[float, float], destination: tuple[float, float]) -> float:
+    # haversine distance
+    lat1, lon1 = origin
+    lat2, lon2 = destination
+    radius = 6371  # km
+
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) * math.sin(dlat / 2)
+    a += math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) * math.sin(dlon / 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    d = radius * c
+
+    return d

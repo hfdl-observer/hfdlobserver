@@ -1,0 +1,325 @@
+html {
+    font-family: "Droid Sans Mono", "Roboto Mono", "Andale Mono", "Courier New", "Courier", mono, fixed;
+    background-color: black;
+    color: #a0a0a0;
+}
+body {
+    height: 100vh;
+    overflow-y: hidden;
+    display: flex;
+    flex-flow: column;
+    margin: 0px;
+}
+.bin {
+    min-width: 2em;
+    text-align: center;
+}
+li {
+    display: inline-block;
+}
+table span.stnid, table span.name, table span.abbreviation, table span.lat, table span.long, table span.frequency {
+    display: none;
+}
+table.by_frequency span.abbreviation, table.by_frequency span.frequency {
+    display: inline-block;
+}
+table.by_ground_station span.stnid, table.by_ground_station span.abbreviation {
+    display: inline-block;
+    font-size: smaller;
+}
+table.by_ground_station tbody th.rowheader span.value {
+    display: none;
+}
+tr th span {
+    display: inline-block;
+    padding-left: 0.25ex;
+    padding-right: 0.25ex;
+}
+table.by_frequency tr th span.abbreviation {
+    font-size: smaller;
+    color: #808080;
+    float: left;
+    text-align: left;
+}
+table.by_frequency tr th span.value {
+    float: right;
+    text-align: right;
+}
+#topline, .tooltip .title {
+    background-color: #006000;
+    color: white;
+}
+#statusline {
+    text-align: right;
+}
+.bar {
+    background-color: #606060;
+    color: white;
+}
+#count_header, #aircraft thead tr.aircraft_header, #messages thead tr.messages_header {
+    background-color: #303030;
+    color: #a0a0a0;
+    font-weight: bold;
+    padding: 0.5ex;
+}
+#count_header {
+    text-align: right;
+}
+#count_table {
+    overflow-x: scroll;
+    width: 100%;
+}
+ul {
+    padding: 2px;
+    margin: 0px;
+}
+.uptime {
+    float: right;
+    padding-right: 1ex;
+}
+.forecast ul {
+    margin-left: 1em;
+    margin-right: 1em;
+}
+.forecast ul li {
+    margin-top: -1px;
+    margin-bottom: -1px;
+}
+.forecast .extreme {
+    color: yellow;
+    background-color: #440000;
+}
+.forecast .severe {
+    color: black;
+    background-color: #880000;
+}
+.forecast .strong {
+    color: white;
+    background-color: #804000;
+}
+.forecast .moderate {
+    color: white;
+    background-color: #a05000;
+}
+.forecast .minor {
+    color: black;
+    background-color: gold;
+}
+.forecast .default, .forecast .none {
+    color: #a0a0a0;
+    background-color: #202020;
+}
+.from_air:before {
+    content: "⏬";
+    padding-right: 2px;
+}
+.from_ground:before {
+    content: "⏫";
+    padding-right: 2px;
+}
+.with_position:before {
+    content: "🌐";
+    padding-right: 2px;
+}
+.no_position:before {
+    content: "❔";
+    padding-right: 2px;
+}
+.squitters:before {
+    content: "📰";
+    padding-right: 2px;
+}
+.target_freqs:before {
+    content: "🔎";
+    padding-right: 2px;
+}
+.active_freqs:before {
+    content: "/";
+    padding-right: 2px;
+}
+.untarget_freqs:before {
+    content: "+";
+    padding-right: 2px;
+}
+.packets:before {
+    content: "📶";
+    padding-right: 2px;
+}
+.rowheader, .fakeheader {
+    width: 8em;
+    min-width: 8em;
+}
+.rowheader {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    top: auto;
+    background-color: black;
+    border: 1px solid black;
+    white-space: nowrap;
+}
+.rowfooter, .fakefooter {
+    width: 4em;
+    min-width: 4em;
+}
+.rowfooter {
+    position: sticky;
+    right: 0;
+    top: auto;
+    background-color: black;
+    border: 1px solid black;
+}
+.bin {
+    margin: 1px;
+    border: 1px solid black;
+}
+table {
+    border: 0px;
+    border-collapse: collapse;
+}
+.tag_active.bin:empty {
+    padding: 0px;
+    border: 0px;
+}
+.tag_active.bin:empty:before {
+    content: "";
+    display: block;
+    height: 0px;
+    background-color: black;
+    border-top: 1px dashed #808080;
+    margin: 0px;
+    padding: 0px;
+}
+.tag_untargetted.bin {
+    background-color: #201414;
+}
+.tag_targetted.bin {
+    background-color: #142014;
+}
+.jsonlink {
+    font-size: smaller;
+    border-radius: 1ex;
+    background-color: #50a050;
+    float: right;
+    margin-right: 1pc;
+    margin-left: 1pc;
+    padding-left: 1ex;
+    padding-right: 1ex;
+    margin-top: 0.33ex;
+}
+.jsonlink a, .jsonlink a:link {
+    color: white;
+    text-decoration: none;
+}
+.hfdl_container {
+    display: flex;
+    font-family: Roboto Sans, Droid Sans, Helvetica, sans;
+    overflow-y: hidden;
+    position: relative;
+}
+.column {
+    flex: 1;
+    overflow-x: scroll;
+}
+.hfdl_container table {
+    font-size: smaller;
+    text-align: center;
+    width: 100%;
+    padding-left: 1pc;
+    padding-right: 1pc;
+    overflow-y: scroll;
+    border: 1px solid black;
+}
+.hfdl_container table.data>tbody>tr:nth-child(even) {
+    background-color: #181818;
+}
+.hfdl_container table.data>tbody>tr:nth-child(odd) {
+    background-color: #000;
+}
+.hfdl_container table.data thead {
+    position: sticky;
+    top: 0;
+    background-color: black;
+}
+.hfdl_container thead div {
+    display: inline-block;
+}
+.hfdl_container thead .bar, #messages thead .bar {
+    font-size: larger;
+    font-weight: bold;
+}
+.hfdl_container .bar {
+    padding: 0.5ex;
+    text-align: left;
+}
+td.sess {
+    display: none;
+}
+td.acid {
+    font-weight: bold;
+}
+td.pktyp {
+    text-align: center;
+}
+td.pktyp span {
+    font-size: 70%;
+    color: white;
+    border-radius: 1ex;
+    padding-left: 1ex;
+    padding-right: 1ex;
+    margin-left: 0.5ex;
+    margin-right: 0.5ex;
+    background-color: #404040;
+}
+td.pktyp span.lpdu {
+    background-color: #552;
+}
+td.pktyp span.perf {
+    background-color: #008080;
+}
+td.pktyp span.acars {
+    background-color: #408000;
+}
+td.pktyp span.adsc {
+    background-color: #008040;
+}
+td.pktyp span.hfnpdu {
+    background-color: #808000;
+}
+
+.xhas_tooltip {
+    /* Can't do this and have sticky on thead. So, we compromise */
+    position: relative;
+}
+.has_tooltip .tooltip {
+    display: none;
+}
+.has_tooltip:hover>td {
+    background-color: #666;
+    color: #ccc;
+}
+.has_tooltip:hover .tooltip {
+    display: block;
+    position: absolute;
+    bottom: 3ex;
+    right: 52%;
+    color: #000000;
+    background: #aaa;
+    border-radius: 1ex;
+    padding: 0px;
+    z-index: 10;
+}
+.has_tooltip .tooltip_holder {
+    width: 0px;
+}
+.tooltip .title {
+    border-radius: 1ex 1ex 0px 0px;
+    padding: 1ex 1ex;
+}
+.tooltip .body {
+    padding: 1ex;
+}
+.tooltip .body table.extra {
+    border: 0px;
+    color: black;
+}

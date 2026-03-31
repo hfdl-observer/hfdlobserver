@@ -373,15 +373,19 @@ class PacketWatcher(data.AbstractPacketWatcher):
         packet._add()
         return packet
 
-    def recent_packets(cls, since: datetime.datetime) -> Iterable[ReceivedPacket]:
+    def _recent_packets(cls, since: datetime.datetime) -> Iterable[ReceivedPacket]:
         when = to_timestamp(since)
         yield from ReceivedPacket._since(when)
 
-    def binned_recent_packets(self, since: datetime.datetime, bin_size: int) -> Iterable[tuple[int, ReceivedPacket]]:
+    def _binned_recent_packets(self, since: datetime.datetime, bin_size: int) -> Iterable[tuple[int, ReceivedPacket]]:
         when_ts = to_timestamp(since)
-        for packet in self.recent_packets(since):
+        for packet in self._recent_packets(since):
             bin_number = int((when_ts - packet.received) // TS_FACTOR // bin_size)
             yield bin_number, packet
+
+    async def recent_packets(self, since: datetime.datetime) -> Sequence[data.ReceivedPacket]:
+        packets: Sequence[data.ReceivedPacket] = list(await util.in_db_thread(self._recent_packets, since))
+        return packets
 
     async def packets_by_frequency_station(
         self, bin_size: int, num_bins: int
@@ -395,7 +399,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[tuple[int, int], data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self.binned_recent_packets(when, bin_size):
+        for bin_number, packet in self._binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
             group = _data[(packet.frequency, station_id)]
             group.annotate(station_id)
@@ -413,7 +417,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self.binned_recent_packets(when, bin_size):
+        for bin_number, packet in self._binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
             group = _data[packet.agent or "unknown"]
             group.annotate(station_id)
@@ -428,7 +432,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[int, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self.binned_recent_packets(when, bin_size):
+        for bin_number, packet in self._binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
             group = _data[station_id]
             group.annotate(station_id)
@@ -443,7 +447,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[int, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self.binned_recent_packets(when, bin_size):
+        for bin_number, packet in self._binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
             group = _data[packet.frequency // 1000]
             group.annotate(station_id)
@@ -458,7 +462,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self.binned_recent_packets(when, bin_size):
+        for bin_number, packet in self._binned_recent_packets(when, bin_size):
             station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
             group = _data[packet.receiver]
             group.annotate(station_id)

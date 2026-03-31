@@ -36,7 +36,7 @@ import hfdl_observer.settings as settings
 import hfdl_observer.util as util
 
 import hfdlobserver
-import jsonui
+import webui
 
 logger = logging.getLogger(__name__)
 start = datetime.datetime.now()
@@ -419,7 +419,7 @@ def exit(*_: Any) -> None:
 
 def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
     SECONDARY_TYPES = {
-        "web" : jsonui.ObserverDisplay,
+        "web" : webui.ObserverDisplay,
     }
     if not (klass := SECONDARY_TYPES.get(config["type"])):
         logger.warning(f'{config["type"]} is not a valid Secondary Display; ignoring.')
@@ -473,6 +473,8 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         util.schedule(forecaster.run())
         util.schedule(display_updater.run())
         util.schedule(keyboard.run())
+        for secondary in display.secondary_displays:
+            secondary.register(observer)
         keyboard.add_mapping("r", lambda _: observer.maybe_describe_receivers(force=True))
         keyboard.add_mapping("R", lambda _: observer.maybe_describe_receivers(force=True))
 

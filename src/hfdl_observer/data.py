@@ -3,6 +3,8 @@
 # see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
+from __future__ import annotations
+
 import collections
 import dataclasses
 import datetime
@@ -187,6 +189,9 @@ class AbstractPacketWatcher:
         raise NotImplementedError(str(self.__class__))
 
     async def daily_counts(self, limit: int) -> Sequence[int]:
+        raise NotImplementedError(str(self.__class__))
+
+    async def recent_packets(self, since: datetime.datetime) -> Sequence[ReceivedPacket]:
         raise NotImplementedError(str(self.__class__))
 
 
