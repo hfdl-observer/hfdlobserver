@@ -1,6 +1,6 @@
 # hfdl_observer/heatmapui.py
 # copyright 2026 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
