@@ -486,8 +486,9 @@ if __name__ == "__main__":
     ac_json = json.dumps(sorted_ac)
     logging.warning(f"size of aircraft.json {len(ac_json)}")
     logging.warning(f"size of messages.json {len(json.dumps(list(reversed(fake.recent_packets))))}")
+    JOIN = '\n\n'
     for k, ac in tracker.aircraft_by_session.items():
-        assert k == ac.session_id, f"mismatch {k} != {ac.session_id}\n{'\n\n'.join(repr(p.packet) for p in ac.packets)}"
+        assert k == ac.session_id, f"mismatch {k} != {ac.session_id}\n{JOIN.join(repr(p.packet) for p in ac.packets)}"
     num_sessions = len(tracker.aircraft_by_session.values())
     num_uniques = len(set(ac.session_id for ac in tracker.aircraft_by_session.values()))
     assert num_sessions == num_uniques
