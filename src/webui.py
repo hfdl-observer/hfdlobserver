@@ -332,7 +332,7 @@ class HTMLFormatter:
         return "\n".join(out)
 
     def format_packet_table_row(self, pkt: dict) -> str:
-        now = datetime.datetime.now(datetime.UTC).timestamp()
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         UNKNOWN = "-"
         perf = pkt.get("perf", {})
         columns = [
