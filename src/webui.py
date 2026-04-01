@@ -59,14 +59,28 @@ class ObserverDisplay(jsonui.ObserverDisplay):
                 logger.error("could not start web server", exc_info=err)
 
 
+FORECAST_TIPS = {
+    ("recent", "r"): "Radio degradation previous 24h",
+    ("recent", "s"): "Solar storm level previous 24h",
+    ("recent", "g"): "Geomagnetic impacts previous 24h",
+    ("current", "r"): "current radio degradation",
+    ("current", "s"): "current solar storm level",
+    ("current", "g"): "current geomagnetic impacts",
+    ("tomorrow", "r"): "chance of minor/major radio blackout next 24h",
+    ("tomorrow", "s"): "chance of S1 solar storm next 24h",
+    ("tomorrow", "g"): "expected geomagnetic impact next 24h",
+}
+
+
 class HTMLFormatter:
     refresh_delay: int = 0
     stylesheet_path: pathlib.Path
 
-    def format_forecast_element(self, prefix: str, element: str | dict) -> str:
+    def format_forecast_element(self, period: str, prefix: str, element: str | dict) -> str:
+        tip = FORECAST_TIPS[(period, prefix)]
         if isinstance(element, str):
-            return f'<li class="{prefix} default">{prefix.upper()}{element}</li>\n'
-        return f"""<li class="{prefix} {element["style"]}">{prefix.upper()}{element["scale"]}</li>\n"""
+            return f'<li class="{prefix} default" title="{tip}">{prefix.upper()}{element}</li>\n'
+        return f"""<li class="{prefix} {element["style"]}" title="{tip}">{prefix.upper()}{element["scale"]}</li>\n"""
 
     def format_forecast(self, forecast: dict) -> str:
         parts = ['<ul class="forecast">\n']
@@ -74,7 +88,7 @@ class HTMLFormatter:
             period = forecast[period_name]
             parts.append(f'<li class="{period_name}"><ul>')
             for part in "rsg":
-                parts.append(self.format_forecast_element(part, period[part]))
+                parts.append(self.format_forecast_element(period_name, part, period[part]))
             parts.append("</ul></li>")
         parts.append("</ul>")
         return "\n".join(parts)
@@ -148,24 +162,24 @@ class HTMLFormatter:
     def format_statusline(self, status: dict) -> str:
         parts = ['<ul class="statusline">']
         all_keys = [
-            "from_air",
-            "from_ground",
-            "with_position",
-            "no_position",
-            "squitters",
-            "target_freqs",
-            "active_freqs",
-            "untarget_freqs",
-            "packets",
-            "last_day",
-            "last_week",
-            "sparkline",
+            ("from_air", "packets received from aircraft"),
+            ("from_ground", "packets received from ground stations"),
+            ("with_position", "packets with position data"),
+            ("no_position", "packets without position data"),
+            ("squitters", "squitter packets"),
+            ("target_freqs", "number of active frequencies observed"),
+            ("active_freqs", "number of declared active frequencies"),
+            ("untarget_freqs", "additional frequencies observed"),
+            ("packets", "total number of packets received since HFDLObserver started"),
+            ("last_day", "number of packets received in the last 24h"),
+            ("last_week", "number of packets received in the last 7d"),
+            ("sparkline", "relative reception of packets each day for last 7d"),
         ]
-        for k in all_keys:
+        for k, tip in all_keys:
             v = status[k]
             if v in ("", None):
                 continue
-            parts.append(f'<li class="{k}">{v}</li>')
+            parts.append(f'<li class="{k}" title="{tip}">{v}</li>')
         parts.append("</ul>")
         return "\n".join(parts)
 
@@ -217,7 +231,7 @@ class HTMLFormatter:
         <tr><th>Flight</th><td>{ac.flight or UNKNOWN}</td></tr>
         <tr><th>Tail</th><td>{ac.r or UNKNOWN}</td></tr>
         <tr><th>ICAO</th><td>{ac.hex_id or UNKNOWN}</td></tr>
-        <tr><th>Frequency</th><td>{ac.session_id[1]}</td></tr>
+        <tr><th>Frequency</th><td>{ac.freq}</td></tr>
         <tr><th>RSSI</th><td>{ac.rssi:0.2f}</td></tr>
     </table></div>
 </div></td>
@@ -282,7 +296,8 @@ class HTMLFormatter:
         if not source.tracker:
             return ""
         out = []
-        sorted_ac = sorted(source.tracker.aircraft_by_session.values(), key=lambda e: e.seen)
+        sorted_ac = sorted(source.tracker.tracked_aircraft, key=lambda e: e.seen)
+        # sorted_ac = sorted(source.tracker.aircraft_by_session.values(), key=lambda e: e.seen)
         out.append(self.format_aircraft_table(sorted_ac))
         return "\n".join(out)
 

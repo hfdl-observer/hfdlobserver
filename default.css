@@ -219,7 +219,7 @@ table {
 }
 .column {
     flex: 1;
-    overflow-x: scroll;
+    overflow-x: hidden;
 }
 .hfdl_container table {
     font-size: smaller;

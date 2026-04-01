@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import functools
+import itertools
 import logging
 
 from typing import Sequence
@@ -39,6 +40,7 @@ class Aircraft:
     _seen_ts: float = 0  # underlying timestamp
     # seen_pos: how many seconds ago the last message with position information was received
     _seen_pos_ts: float | None = None
+    freq: int = 0
     # rssi: received strength (dBFS)
     rssi: float | None = None
     # t: aircraft type. requires registration db or lucky parsing of embedded acars.
@@ -58,6 +60,7 @@ class Aircraft:
     def update(self, packet: hfdl.HFDLPacketInfo, home_lat: float | None, home_lon: float | None) -> Aircraft:
         self.packets.append(packet)
         self.messages += 1
+        self.freq = packet.frequency
         self.rssi = packet["sig_level"]
         seen = packet.timestamp
         self.hex_id = packet.icao
@@ -133,6 +136,8 @@ class Aircraft:
 
     @property
     def session_hex(self) -> str:
+        if self.session_id == (-1, -1, -1):
+            return "00000000"
         gs, fq, sl = [hex(e)[2:] for e in self.session_id]
         return f"{gs.zfill(2)}{fq.zfill(4)}{sl.zfill(2)}"
 
@@ -192,7 +197,7 @@ class AircraftTracker:
         # if we've migrated a session, remove the old session ID, so there aren't duplicates.
         if ac and packet.session_id != ac.session_id:
             self.purge_session(ac.session_id)
-            if packet.session_id:
+            if packet.session_id and packet.session_id[2] not in (0xff, -1):
                 ac.session_id = packet.session_id  # probably redundant
         return ac
 
@@ -201,6 +206,15 @@ class AircraftTracker:
         session_id = packet.session_id
         if not session_id or session_id == (None, None, None):
             # probably an SPDU. have to ignore this packet for aircraft considerations.
+            position = packet.position
+            if position:
+                if (
+                    (position[0] != position[1] or position[0])  # not 0, 0
+                    and -91 < position[0] < 91   # not 180, 180
+                    and -181 < position[1] < 181
+                ):
+                    logging.error(f"discarding position from {packet.packet} (reason 2)")
+                logging.error(f"discarding position from {packet.packet} (reason 1)")
             return
         # deal with some logon cases. logoff will take care of itself when the ID is reused.
         if packet.is_logon:
@@ -210,42 +224,58 @@ class AircraftTracker:
             # the session_id will be 255(unknown), so the session can only be reestablished by reference to previous ac
             # info
             ac = self.aircraft_from_packet(packet)
-            if not ac:
-                # nothing to do. we have to drop this packet.
-                return
-            # resume using the old ID
-            session_id = ac.session_id
+            if ac:
+                # resume using the old ID
+                session_id = ac.session_id
+            else:
+                # Create a new Aircraft, but don't give it a valid session ID, nor add it to the main dict.
+                # Instead, it will sit in the icao/tail/flight lookups.
+                # When a real ID is assigned, this packet's data will become available to the now-tracked aircraft.
+                session_id = None
+                ac = Aircraft(session_id=(-1, -1, -1))
         else:
             ac = self.aircraft_by_session.get(session_id)
-        if ac:
-            # Need to do some sanity checking to make sure this is the *correct* session. If some other identifying
-            # property is present and different, then we have missed a LOGOOUT/LOGON pair. Not a surprise.
-            if (
-                (ac.flight and packet.flight and packet.flight != ac.flight)
-                or (ac.r and packet.tail and packet.tail != ac.r)
-                or (ac.hex_id and packet.icao and packet.icao != ac.hex_id)
-            ):
-                self.purge_session(session_id)
-                ac = None
-        if not ac:
-            ac = self.aircraft_from_packet(packet)
+        if session_id:
             if ac:
-                ac.session_id = session_id
-            else:
-                ac = Aircraft(session_id=session_id)
-            self.aircraft_by_session[session_id] = ac
-        ac.update(packet, self.home_lat, self.home_lon)
-        # associate it with the other ways of identifying an aircraft
-        if ac.hex_id:
-            self.aircraft_by_icao[ac.hex_id] = ac
-        if ac.flight:
-            self.aircraft_by_flight[ac.flight] = ac
-        if ac.r:
-            self.aircraft_by_icao[ac.r] = ac
+                # Need to do some sanity checking to make sure this is the *correct* session. If some other identifying
+                # property is present and different, then we have missed a LOGOOUT/LOGON pair. Not a surprise.
+                if (
+                    (ac.flight and packet.flight and packet.flight != ac.flight)
+                    or (ac.r and packet.tail and packet.tail != ac.r)
+                    or (ac.hex_id and packet.icao and packet.icao != ac.hex_id)
+                ):
+                    self.purge_session(session_id)
+                    ac = None
+            if not ac:
+                ac = self.aircraft_from_packet(packet)
+                if ac:
+                    ac.session_id = session_id
+                else:
+                    ac = Aircraft(session_id=session_id)
+                self.aircraft_by_session[session_id] = ac
+        if ac:  # mypy nonsense, at this point, ac should always be non-None
+            ac.update(packet, self.home_lat, self.home_lon)
+            # associate it with the other ways of identifying an aircraft
+            if ac.hex_id:
+                self.aircraft_by_icao[ac.hex_id] = ac
+            if ac.flight:
+                self.aircraft_by_flight[ac.flight] = ac
+            if ac.r:
+                self.aircraft_by_icao[ac.r] = ac
 
     def on_hfdl(self, packet: hfdl.HFDLPacketInfo) -> None:
         util.call_soon(self.update_session, packet)
         # self.update_session(packet)
+
+    @property
+    def tracked_aircraft(self) -> Sequence[Aircraft]:
+        out = list(self.aircraft_by_session.values())
+        for ac in itertools.chain(
+            self.aircraft_by_flight.values(), self.aircraft_by_tail.values(), self.aircraft_by_icao.values()
+        ):
+            if ac not in out:
+                out.append(ac)
+        return out
 
 
 if __name__ == "__main__":
@@ -296,6 +326,6 @@ if __name__ == "__main__":
         logging.warning(str(packet))
         tracker.update_session(packet)
     print("<html><body>")
-    sorted_ac = sorted(tracker.aircraft_by_session.values(), key=lambda e: e.seen)
+    sorted_ac = sorted(tracker.tracked_aircraft, key=lambda e: e.seen)
     print(aircraft_table(sorted_ac))
     print("</body></html>")
