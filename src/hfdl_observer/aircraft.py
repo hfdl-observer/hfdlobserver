@@ -178,7 +178,8 @@ class AircraftTracker:
         ]
         for ix, d in enumerate(all_d):
             if len(d) > self.gate:
-                outdated_session_ids = [k for k, ac in d.items() if ac.seen > self.horizon]
+
+                outdated_session_ids = [k for k, ac in list(d.items()) if ac.seen > self.horizon]
                 for sid in outdated_session_ids:
                     del d[sid]
 
@@ -270,9 +271,12 @@ class AircraftTracker:
     @property
     def tracked_aircraft(self) -> Sequence[Aircraft]:
         out = list(self.aircraft_by_session.values())
-        for ac in itertools.chain(
-            self.aircraft_by_flight.values(), self.aircraft_by_tail.values(), self.aircraft_by_icao.values()
-        ):
+        all_sources = [
+            list(self.aircraft_by_flight.values()),
+            list(self.aircraft_by_tail.values()),
+            list(self.aircraft_by_icao.values()),
+        ]
+        for ac in itertools.chain(*all_sources):
             if ac not in out:
                 out.append(ac)
         return out
