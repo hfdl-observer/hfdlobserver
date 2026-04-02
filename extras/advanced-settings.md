@@ -670,7 +670,10 @@ Example:
     type: bfi
 ```
 
-Using this may be interesting if you have enough receivers configured to cover all frequencies. Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies. As this method ignores station preferences and current active frequencies, the list of allocation is “more stable”, but is of little use, as there’s no guarantee that any active frequencies will be assigned.
+Using this may be interesting if you have enough receivers configured to cover all frequencies.
+Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies.
+As the `bfi` method ignores station preferences and current active frequencies, the list of allocation is “more stable”,
+but is of little use, as there’s no guarantee that any active frequencies will be assigned.
 
 ## Experimental WebUI (Not Supported)
 
@@ -679,7 +682,7 @@ This is called a “secondary” display. Some points to bear in mind.
 
 > \[!IMPORTANT\]
 > The internal web server is not production grade.
-> It’s capabilities are intentionally very limited.
+> Its capabilities are intentionally very limited.
 > However, it cannot be considered hardened against attacks, especially DDOS.
 > **DO NOT** expose its port directly.
 > Place it behind a CDN or caching proxy.
@@ -736,5 +739,7 @@ The following URLs are the only ones served by the internal webserver:
 - `http://address-of-observer:port/display.json` : JSON data used for the console display.
 - `http://address-of-observer:port/aircraft.json` : JSON data used for the Recent Aircraft pane.
 - `http://address-of-observer:port/messages.json` : JSON data used for the Recent Messages pane
+
+---
 
 `pandoc -t gfm --wrap=preserve --reference-location=document --toc -s -o extras/advanced-settings.md extras/advanced-settings.md`
