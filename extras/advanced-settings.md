@@ -20,6 +20,9 @@
   - [Experimental Conductor Options (Not Supported)](#experimental-conductor-options-not-supported)
     - [`type: static` (Experimental)](#type-static-experimental)
     - [`type: bfi` (Experimental)](#type-bfi-experimental)
+  - [Experimental WebUI (Not Supported)](#experimental-webui-not-supported)
+    - [Settings](#settings-1)
+    - [URLs Served](#urls-served)
 
 # Advanced Topics
 
@@ -669,4 +672,69 @@ Example:
 
 Using this may be interesting if you have enough receivers configured to cover all frequencies. Allocating with the `type: diverse` (default) method may generate different results depending on the currently active frequencies. As this method ignores station preferences and current active frequencies, the list of allocation is “more stable”, but is of little use, as there’s no guarantee that any active frequencies will be assigned.
 
-`pandoc --wrap=preserve -t gfm --reference-location=document --toc -s -o extras/advanced-settings.md extras/advanced-settings.md`
+## Experimental WebUI (Not Supported)
+
+HFDLObserver contains an experimental, simple, and unsophisticated web-based display mode.
+This is called a “secondary” display. Some points to bear in mind.
+
+> \[!IMPORTANT\]
+> The internal web server is not production grade.
+> It’s capabilities are intentionally very limited.
+> However, it cannot be considered hardened against attacks, especially DDOS.
+> **DO NOT** expose its port directly.
+> Place it behind a CDN or caching proxy.
+
+- It is display-only. You cannot control HFDLObserver from the browser.
+- Its display mode follows the CUI.
+  If you switch display modes or bin sizes, it will be reflected on the browser at the next update.
+- It is pure HTML+CSS. It uses no scripting, and thus has very little direct interactivity.
+- All the data used in constructing the HTML is available via JSON URLs on the same service.
+
+### Settings
+
+To enable this display, a new section is added to the `cui` section:
+
+``` yaml
+cui:
+  ... # any current CUI settings here ...
+  secondary_displays:
+    - type: web
+      address: 0.0.0.0
+      port: 8765
+      refresh: 16
+      aircraft:
+        latitude: 180.00
+        longitude: 360.00
+        horizon: 3600
+        gate: 256
+```
+
+- `type`: only one is currently supported: `web`
+- `address`: the IP address to listen on. `0.0.0.0` means to listen on all.
+  If you don’t know what you’re doing, leave it at this value.
+- `port`: the TCP port to listen on.
+  The default value is fine for most uses, but it is configurable.
+- `refresh`: The refresh period of the HTML-based pages. The default (and recommended value) is `16`.
+
+The `aircraft` section configures the Recent Aircraft pane of the general web page.
+If it is absent, that pane will not display.
+
+- `latitude` and `longitude` are the decimal coordinates that will be used when calculating the `distance` and `bearing` columns on the Recent Aircraft display.
+  If you do not provide these, those columns will not be calculated.
+  These coordinates are used only for these columns, and, given HFDL positioning, exact coordinates are not necessary.
+- `gate` controls the soft limit on the Aircraft Pane display.
+  Once more than this number of aircraft are tracked, any with no messages more recent than `horizon` seconds are dropped.
+- `horizon` controls how long (in seconds) the Recent Messages pane will show messages before they are dropped.
+  Similarly, the horizon determines how long a tracked Aircraft can linger without a message before being dropped from the Aircraft pane when it is full.
+
+### URLs Served
+
+The following URLs are the only ones served by the internal webserver:
+
+- `http://address-of-observer:port/` : The full display as HTML
+- `http://address-of-observer:port/display.html` : only the heatmap and summmary lines as the console.
+- `http://address-of-observer:port/display.json` : JSON data used for the console display.
+- `http://address-of-observer:port/aircraft.json` : JSON data used for the Recent Aircraft pane.
+- `http://address-of-observer:port/messages.json` : JSON data used for the Recent Messages pane
+
+`pandoc -t gfm --wrap=preserve --reference-location=document --toc -s -o extras/advanced-settings.md extras/advanced-settings.md`

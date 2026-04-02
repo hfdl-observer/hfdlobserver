@@ -203,25 +203,28 @@ class HTMLFormatter:
 
     def render_display(self, source: ObserverDisplay) -> str:
         state = source.current_state
-        status = state["totals"]
-        statusline = f"""<ul class="statusline">{self.format_statusline(status)}</ul>"""
-        refresh = f'<meta http-equiv="refresh" content="{self.refresh_delay}">' if self.refresh_delay > 1 else ""
-        head = f"""
+        try:
+            status = state["totals"]
+            statusline = f"""<ul class="statusline">{self.format_statusline(status)}</ul>"""
+            refresh = f'<meta http-equiv="refresh" content="{self.refresh_delay}">' if self.refresh_delay > 1 else ""
+            head = f"""
 <head>
 <meta charset="UTF-8">
 <title>HFDLObserver</title>
 <style>{self.styles()}</style>
 {refresh}
 </head>
-        """
-        body = f"""
+            """
+            body = f"""
 <body>
 <div id="topline">{self.render_topline(state["status"])}</div>
 <div id="statusline">{statusline}</div>
 <div id="counts">{self.format_counts(state["counts"])}</div>
 </body>
-        """
-        return f"<!doctype html><html>{head}{body}</html>"
+            """
+            return f"<!doctype html><html>{head}{body}</html>"
+        except KeyError:
+            return self.starting_html()
 
     def format_tooltip(self, ac: aircraft.Aircraft) -> str:
         return f'''
@@ -372,20 +375,44 @@ class HTMLFormatter:
         packets = list(reversed(source.recent_packets))
         return self.format_packet_table(packets)
 
-    def render_all(self, source: ObserverDisplay) -> str:
-        state = source.current_state
-        status = state["totals"]
-        statusline = f"""<ul class="statusline">{self.format_statusline(status)}</ul>"""
+    def starting_html(self) -> str:
         refresh = f'<meta http-equiv="refresh" content="{self.refresh_delay}">' if self.refresh_delay > 1 else ""
-        head = f"""
+        return f"""<!doctype html>
 <head>
 <meta charset="UTF-8">
 <title>HFDLObserver</title>
 <style>{self.styles()}</style>
 {refresh}
 </head>
+<body>
+<div id="topline">
+    <ul class="topline">
+        <li class="icon"></li>
+        <li class="title">HFDLObserver</li>
+        <li class="uptime">STARTING</li>
+    </ul>
+</div>
+<div id="statusline" class="bar">&nbsp;</div>
+<h1>HFDLObserver is starting up</h1>
+</body>
+</html>
         """
-        body = f"""
+
+    def render_all(self, source: ObserverDisplay) -> str:
+        state = source.current_state
+        try:
+            status = state["totals"]
+            statusline = f"""<ul class="statusline">{self.format_statusline(status)}</ul>"""
+            refresh = f'<meta http-equiv="refresh" content="{self.refresh_delay}">' if self.refresh_delay > 1 else ""
+            head = f"""
+<head>
+<meta charset="UTF-8">
+<title>HFDLObserver</title>
+<style>{self.styles()}</style>
+{refresh}
+</head>
+            """
+            body = f"""
 <body>
 <div id="topline">{self.render_topline(state["status"])}</div>
 <div id="statusline" class="bar">{statusline}</div>
@@ -395,8 +422,10 @@ class HTMLFormatter:
     <div class="column" id="messages">{self.render_messages(source)}</div>
 </div>
 </body>
-        """
-        return f"<!doctype html><html>{head}{body}</html>"
+            """
+            return f"<!doctype html><html>{head}{body}</html>"
+        except KeyError:
+            return self.starting_html()
 
 
 class NaiveHandler(http.server.BaseHTTPRequestHandler, HTMLFormatter):
