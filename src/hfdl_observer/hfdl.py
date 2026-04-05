@@ -210,8 +210,7 @@ class HFDLPacketInfo(PathingWrapper):
             for key in [
                 "reg",
                 "miam.single_transfer.miam_core.data.aircraft_id",
-                "miam.miam.single_transfer.miam_core.ack.aircraft_id"
-                "arinc622.air_addr",
+                "miam.miam.single_transfer.miam_core.ack.aircraft_idarinc622.air_addr",
             ]:
                 value: str | None = acars[key]
                 if value:
@@ -245,7 +244,7 @@ class HFDLPacketInfo(PathingWrapper):
             minor = self.src if self.is_downlink else self.dst
             ac_id = minor.get("id")
         if major and ac_id is not None:
-            login: tuple[int, int, int] = (int(major['id']), self.frequency, int(ac_id))
+            login: tuple[int, int, int] = (int(major["id"]), self.frequency, int(ac_id))
             if None not in login:
                 return login
         return None
@@ -255,7 +254,7 @@ class HFDLPacketInfo(PathingWrapper):
         if self.session_id:
             gs, fq, sl = [hex(e)[2:] for e in self.session_id]
             return f"({gs.zfill(2)}{fq.zfill(4)}{sl.zfill(2)})"
-        return ''
+        return ""
 
     @functools.cached_property
     def structural_type(self) -> str:
@@ -272,7 +271,7 @@ class HFDLPacketInfo(PathingWrapper):
             ]:
                 if hfnpdu[structural_kind]:
                     return name
-            return 'hfnpdu'
+            return "hfnpdu"
         return "lpdu"
 
     @functools.cached_property
@@ -321,7 +320,7 @@ class HFDLPacketInfo(PathingWrapper):
                 ]:
                     if mpdus := stats.get(src):
                         for bps in [300, 600, 1200, 1800]:
-                            if (value := mpdus.get(f'{bps}bps')) is not None:
+                            if (value := mpdus.get(f"{bps}bps")) is not None:
                                 perf[f"{dst}{bps}"] = value
                 if (spdus_missed := stats.get("spdus_missed_cnt")) is not None:
                     perf["spdus_missed"] = spdus_missed

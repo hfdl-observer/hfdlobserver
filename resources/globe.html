@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/globeletjs@0.1.6/dist/globelet.css">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            overflow: hidden;
+            height: calc(100vh + 1px);
+            font-family: Roboto Sans, Droid Sans, Helvetica, sans;
+            background-color: black;
+            color: #a0a0a0;
+        }
+
+        body {
+            position: fixed;
+            height: 100%;
+            width: 100%;
+            border: 0;
+            margin: 0;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        #globe {
+            height: 100%;
+        }
+
+        #infobox,
+        .infoslider.slid .infoTopBar {
+            background-color: black;
+        }
+
+        #infobox table {
+            margin: 2pc;
+        }
+
+        #infobox table th {
+            text-align: right;
+        }
+
+        #infobox table td {
+            padding-left: 1em;
+        }
+        #infobox h1 {
+            text-align: center;
+            padding: 0px;
+            margin: 0px;
+            background-color: #006000;
+            color: white;
+        }
+        #notice {
+            position: absolute;
+            bottom: 1pc;
+            left: 1pc;
+            background-color: rgba(255, 255, 255, 0.33);
+            color: #444;
+            font-size: smaller;
+            z-index: 16;
+            padding-left: 1ex;
+            padding-right: 1ex;
+        }
+        #hfdlobserver {
+            position: absolute;
+            top: 1pc;
+            left: 0px;
+            width: 33%;
+            background-image: linear-gradient(to right, rgba(0, 96, 0, 0.5), rgba(0, 96, 0, 0.5), rgba(0, 96, 0, 0));
+            color: #aaa;
+            font-weight: bold;
+            z-index: 16;
+            padding: 0.5ex 10pc 0.5ex 1pc;
+        }
+        #notice a:link,
+        #notice a:visited {
+            color: black;
+            text-decoration: none;
+        }
+        #hfdlobserver a:link,
+        #hfdlobserver a:visited {
+            color: white;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        /*
+         # globe.html
+         # copyright 2026 Kuupa Ork <kuupaork+github@hfdl.observer>
+         # see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
+         # TL;DR: BSD 3-clause
+        */
+        import * as globeletjs from "https://unpkg.com/globeletjs@0.1.6/dist/globelet.js";
+        const aircraft_url = "aircraft.json";
+        const style_url = "https://raw.githubusercontent.com/openmaptiles/maptiler-basic-gl-style/refs/heads/master/style.json";
+        const maptiler_key = "{{maptiler_key}}";
+        const home_lon = parseFloat("{{home_long}}");
+        const home_lat = parseFloat("{{home_lat}}");
+        const refresh = 16;
+
+        async function loadStyle(url) {
+            const response = await fetch(url)
+            const doc = await response.json();
+            Object.values(doc.sources).forEach(src => {
+                if (src.url) src.url = src.url.replace(/{key}/, maptiler_key);
+            });
+            doc.glyphs = doc.glyphs.replace(/{key}/, maptiler_key);
+            return doc;
+        }
+
+        const params = {
+            container: 'globe',  // element or id string
+            infobox: 'infobox',  // element or id string
+            style: loadStyle(style_url),
+            center: [home_lon, home_lat],  // lon, lat
+            altitude: 18000,
+            minAltitude: 1500,
+            maxAltitude: 40000,
+        };
+
+        const known_aircraft = new Map();
+        const stop = false;
+        const infobox = document.getElementById("infobox");
+        let globe;
+        let focus;
+
+        const key_order = [
+            "hex_id", "flight", "r", "freq", "gs", "rssi", "seen", "recv", "messages", "lat", "lon", "calc_track", "r_dst", "r_dir", "seen_pos"
+        ]
+        const key_titles = {
+            "hex_id": "ICAO",
+            "type": "Last Packet",
+            "flight": "Flight",
+            "r": "Tail/Registration",
+            "calc_track": "Heading",
+            "lat": "Latitude",
+            "lon": "Longitude",
+            "r_dst": "Distance",
+            "r_dir": "Bearing",
+            "messages": "Messages",
+            "freq": "Last Frequency",
+            "gs": "Last Ground Station",
+            "rssi": "RSSI",
+            "t": "Hull Type",
+            "seen": "Packet Age (s)",
+            "seen_pos": "Position Age (s)",
+            "recv": "Received By",
+        }
+
+        function focus_aircraft(ac) {
+            if (!ac.marker || !ac.marker.element) {
+                return;
+            }
+            if (!!focus && focus === ac.marker.element) {
+                globe.hideInfo();
+                return;
+            }
+            var rows = [];
+            for (const key of key_order) {
+                var header = key_titles[key];
+                if (!!header) {
+                    rows.push("<tr><th class='" + key + "'>" + header + "</th><td>" + (ac[key] ?? "-") + "</td></tr>");
+                }
+            }
+
+            const title = "<div class='info'><h1>" + (ac.flight ?? ac.r ?? ac.hex_id ?? "unknown") + "</h1>";
+            const table = "<table>" + rows.join("\n") + "</table></div>";
+            infobox.innerHTML = title + table;
+            globe.showInfo(ac.marker.position);
+            focus_marker(ac.marker.element);
+        }
+
+        function setup_infobox_close() {
+            // no events as such, but we can detect when the sliding class is removed.
+            const targetNode = document.querySelector('.infoslider');
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        const classList = mutation.target.classList;
+                        if (!classList.contains('slid')) {
+                            unfocus_marker();
+                        }
+                    }
+                });
+            });
+
+            const config = {
+                attributes: true,
+                childList: false,
+                subtree: false
+            };
+
+            observer.observe(targetNode, config);
+        }
+
+        function focus_marker(marker) {
+            unfocus_marker();
+            focus = marker;
+            focus.style.fill = "white";
+            focus.style.stroke = "green";
+            focus.style.transform = "translate(-50%, -50%) scale(2, 2)"
+        }
+
+        function unfocus_marker() {
+            if (!!focus) {
+                focus.style.fill = null;
+                focus.style.stroke = null;
+                focus.style.stroke_width = null;
+                focus.style.transform = null;
+            }
+        }
+
+        async function refresh_aircraft(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Could not read aircraft data! status: ${response.status}`);
+                }
+                const acs = await response.json();
+                if (Array.isArray(acs)) {
+                    // console.log("beginning aircraft refresh");
+                    var refreshed_aircraft = new Map();
+                    acs.forEach(ac => {
+                        var ac_marker = marker_opts_for_ac(ac);
+                        if (!!ac_marker) {
+                            ac.marker_opts = ac_marker;
+                            refreshed_aircraft.set(ac.session_id.join(), ac);
+                        }
+                    });
+                    // globePromise.then(globeAPI => {
+                    var added = 0;
+                    var moved = 0;
+                    var deleted = 0;
+                    try {
+                        refreshed_aircraft.forEach((ac, key, map) => {
+                            if (known_aircraft.has(key)) {
+                                var known_ac = known_aircraft.get(key);
+                                var marker = known_ac.marker;
+                                if (marker.position[0] != ac.lon || marker.position[1] != ac.lat) {
+                                    globe.removeMarker(marker);
+                                    known_ac.marker = globe.addMarker(ac.marker_opts);
+                                    known_ac.marker.element.addEventListener('click', () => { focus_aircraft(ac); });
+                                    moved++;
+                                }
+                            }
+                            else {
+                                ac.marker = globe.addMarker(ac.marker_opts);
+                                ac.marker.element.addEventListener('click', () => { focus_aircraft(ac); });
+                                known_aircraft.set(key, ac);
+                                added++;
+                            }
+                        })
+                        known_aircraft.forEach((ac, key, map) => {
+                            if (!refreshed_aircraft.has(key)) {
+                                if (!!focus && focus === ac.marker.element) {
+                                    globe.hideInfo();
+                                }
+                                globe.removeMarker(ac.marker);
+                                known_aircraft.delete(key);
+                                deleted++;
+                            }
+                        });
+                        console.log("aircraft updated: " + added + " added, " + moved + " moved, " + deleted + " deleted. Plotted aircraft: " + known_aircraft.size);
+                    }
+                    catch (error) {
+                        console.error("Error processing updates:", error);
+                    }
+                    // });
+                }
+                else {
+                    console.error("invalid data format:", acs);
+                }
+            }
+            catch (error) {
+                console.error("Error refreshing aircraft:", error);
+            }
+        }
+
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms)); // feels weak.
+        async function refresh_loop() {
+            while (!stop) {
+                await refresh_aircraft(aircraft_url);
+                await sleep(refresh * 1000);
+            }
+        }
+
+        function marker_opts_for_ac(ac) {
+            if (ac.lon && ac.lat) {
+                var marker_options = {
+                    // element: link to HTML Element, // else default will be used.
+                    type: "spot",
+                    position: [ac.lon, ac.lat],
+                }
+                return marker_options
+            }
+            return null;
+        }
+
+        const globePromise = globeletjs.initGlobe(params);
+
+        globePromise.then(globeAPI => {
+            globe = globeAPI;
+            globe.startAnimation();
+            // this doesn't work well.
+            // let globe_element = document.getElementById("globe");
+            // globe_element.addEventListener("click", () => { 
+            //     console.log("globe clicked");
+            //     unfocus_marker();
+            // });
+            setup_infobox_close();
+            refresh_loop();
+        });
+
+    </script>
+    <div id="globe">
+        <div id="infobox"></div>
+        <div id="notice">tiles and styling: <a href="https://openmaptiles.org/" rel="nofollow">© OpenMapTiles</a>
+            <a href="https://www.openstreetmap.org/copyright" rel="nofollow">© OpenStreetMap contributors</a>
+        </div>
+        <div id="hfdlobserver">📡 <a href="https://hfdl.observer/">HFDL Observer</a></div>
+    </div>
+</body>
+
+</html>

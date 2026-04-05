@@ -24,6 +24,7 @@ class Aircraft:
     session_id: tuple[int, int, int]  # gs_id, freq(kHz), gs_slot
     # represents a very minimal readsb-like aircraft object.
     # hex_id: ICAO number, unless prefixed with '~' where it represents an alternate identifier (tail or flight number)
+    # this object does not support the "~" usage.
     hex_id: str | None = None
     type: str = "unknown"
     flight: str | None = None
@@ -36,11 +37,6 @@ class Aircraft:
     r_dir: float | None = None
     # number of messages recorded. This may extend beyond the retention horizon
     messages: int = 0
-    # seen: how many seconds ago the last received messages was
-    _seen_ts: float = 0  # underlying timestamp
-    # seen_pos: how many seconds ago the last message with position information was received
-    _seen_pos_ts: float | None = None
-    freq: int = 0
     # rssi: received strength (dBFS)
     rssi: float | None = None
     # t: aircraft type. requires registration db or lucky parsing of embedded acars.
@@ -55,13 +51,27 @@ class Aircraft:
     # tisb: list | tuple = tuple()  # not supported
     # squawk: 4 octal digit representation of Mode A squawk
     # squawk: str | None = None  # not supported
+    # calculated:
+    # seen: how many seconds ago the last received messages was
+    # seen_pos: how many seconds ago the last message with position information was received
     # extras:
+    # _seen_ts: timestamp of the last received message
+    _seen_ts: float = 0  # underlying timestamp
+    # _seen_pos_ts: timestamp of the last message with position information
+    _seen_pos_ts: float | None = None
+    # freq: frequency of the last packet
+    freq: int = 0
+    # gs: ground station of last packet
+    gs: str | None = None
+    recv: str | None = None
 
     def update(self, packet: hfdl.HFDLPacketInfo, home_lat: float | None, home_lon: float | None) -> Aircraft:
         self.packets.append(packet)
         self.messages += 1
         self.freq = packet.frequency
+        self.gs = packet.ground_station["name"]
         self.rssi = packet["sig_level"]
+        self.recv = packet.station
         seen = packet.timestamp
         self.hex_id = packet.icao
         self._seen_ts = seen
@@ -69,7 +79,7 @@ class Aircraft:
         if (
             position
             and (position[0] != position[1] or position[0])  # not 0, 0
-            and -91 < position[0] < 91   # not 180, 180
+            and -91 < position[0] < 91  # not 180, 180
             and -181 < position[1] < 181
         ):
             self._seen_pos_ts = seen
@@ -88,11 +98,11 @@ class Aircraft:
         valid_track = False
         if adsc_tags:
             # "hfdl.lpdu.hfnpdu.acars.arinc622.adsc.tags.<list>.flight_id.flight_id"
-            self.type = 'adsc'
+            self.type = "adsc"
             for valid_key, hdg_key in [
                 ("earth_ref_data.true_trk_valid", "earth_ref_data.true_trk_deg"),
                 ("intermediate_projection.true_trk_valid", "intermediate_projection.true_trk_deg"),
-                ("air_ref_data.true_hdg_valid", "air_ref_data.true_hdg_deg")
+                ("air_ref_data.true_hdg_valid", "air_ref_data.true_hdg_deg"),
             ]:
                 if packet.first_adsc_tag(valid_key) and (track := packet.first_adsc_tag(hdg_key)) is not None:
                     self.calc_track = track
@@ -114,12 +124,7 @@ class Aircraft:
 
     @property
     def best_effort_id(self) -> str:
-        possibilities = [
-            self.flight,
-            self.r,
-            self.hex_id,
-            "unknown"
-        ]
+        possibilities = [self.flight, self.r, self.hex_id, "unknown"]
         return next(e for e in possibilities if e)
 
     @functools.cached_property
@@ -174,11 +179,13 @@ class AircraftTracker:
 
     def preen_aircraft(self) -> None:
         all_d: list[dict] = [
-            self.aircraft_by_session, self.aircraft_by_tail, self.aircraft_by_icao, self.aircraft_by_flight
+            self.aircraft_by_session,
+            self.aircraft_by_tail,
+            self.aircraft_by_icao,
+            self.aircraft_by_flight,
         ]
-        for ix, d in enumerate(all_d):
+        for d in all_d:
             if len(d) > self.gate:
-
                 outdated_session_ids = [k for k, ac in list(d.items()) if ac.seen > self.horizon]
                 for sid in outdated_session_ids:
                     del d[sid]
@@ -198,7 +205,7 @@ class AircraftTracker:
         # if we've migrated a session, remove the old session ID, so there aren't duplicates.
         if ac and packet.session_id != ac.session_id:
             self.purge_session(ac.session_id)
-            if packet.session_id and packet.session_id[2] not in (0xff, -1):
+            if packet.session_id and packet.session_id[2] not in (0xFF, -1):
                 ac.session_id = packet.session_id  # probably redundant
         return ac
 
@@ -211,7 +218,7 @@ class AircraftTracker:
             if position:
                 if (
                     (position[0] != position[1] or position[0])  # not 0, 0
-                    and -91 < position[0] < 91   # not 180, 180
+                    and -91 < position[0] < 91  # not 180, 180
                     and -181 < position[1] < 181
                 ):
                     logging.error(f"discarding position from {packet.packet} (reason 2)")
@@ -221,7 +228,7 @@ class AircraftTracker:
         if packet.is_logon:
             # remove any lingering other aircraft, but continue.
             self.purge_session(session_id)
-        if packet.is_logon_resume or session_id[2] == 0xff:
+        if packet.is_logon_resume or session_id[2] == 0xFF:
             # the session_id will be 255(unknown), so the session can only be reestablished by reference to previous ac
             # info
             ac = self.aircraft_from_packet(packet)
@@ -289,17 +296,17 @@ if __name__ == "__main__":
 
     def aircraft_table_row(aircraft: Aircraft) -> str:
         columns = [
-            ('sess', aircraft.session_hex),
-            ('acid', aircraft.best_effort_id),
-            ('seen', aircraft.seen),
-            ('num_msg', aircraft.messages),
-            ('rssi', f"{aircraft.rssi:0.2f}"),
-            ('lat', f"{aircraft.lat:0.3f}" if aircraft.lat else "n/a"),
-            ('lon', f"{aircraft.lon:0.3f}" if aircraft.lon else "n/a"),
-            ('head', f"{aircraft.calc_track:0.1f}" if aircraft.calc_track else "n/a"),
-            ('r_dst', int(aircraft.r_dst) if aircraft.r_dst else "n/a"),
-            ('r_dir', int(aircraft.r_dir) if aircraft.r_dir else "n/a"),
-            ('pktyp', aircraft.type if aircraft.type else ""),
+            ("sess", aircraft.session_hex),
+            ("acid", aircraft.best_effort_id),
+            ("seen", aircraft.seen),
+            ("num_msg", aircraft.messages),
+            ("rssi", f"{aircraft.rssi:0.2f}"),
+            ("lat", f"{aircraft.lat:0.3f}" if aircraft.lat else "n/a"),
+            ("lon", f"{aircraft.lon:0.3f}" if aircraft.lon else "n/a"),
+            ("head", f"{aircraft.calc_track:0.1f}" if aircraft.calc_track else "n/a"),
+            ("r_dst", int(aircraft.r_dst) if aircraft.r_dst else "n/a"),
+            ("r_dir", int(aircraft.r_dir) if aircraft.r_dir else "n/a"),
+            ("pktyp", aircraft.type if aircraft.type else ""),
         ]
         out = ["<tr>"]
         for klass, value in columns:
@@ -317,11 +324,11 @@ if __name__ == "__main__":
     inpath = pathlib.Path(sys.argv[1])
     intext = inpath.read_text()
     tracker = AircraftTracker({"latitude": 60, "longitude": -40})
-    for line in intext.split('\n'):
+    for line in intext.split("\n"):
         if not line:
             continue
         try:
-            data = json.loads(line.strip('\u0000'))
+            data = json.loads(line.strip("\u0000"))
         except Exception:
             print(line)
             print(ord(line[0]))

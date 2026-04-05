@@ -74,7 +74,7 @@ class ObserverDisplay(baseui.SecondaryObserverDisplay):
 
     def preen_packets(self) -> None:
         horizon = datetime.datetime.now().timestamp() - self.horizon
-        while self.recent_packets and self.recent_packets[0].get('ts', 0) < horizon:
+        while self.recent_packets and self.recent_packets[0].get("ts", 0) < horizon:
             self.recent_packets.popleft()
 
     def update_status(self) -> None:
