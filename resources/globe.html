@@ -224,7 +224,6 @@
                 }
                 const acs = await response.json();
                 if (Array.isArray(acs)) {
-                    // console.log("beginning aircraft refresh");
                     var refreshed_aircraft = new Map();
                     acs.forEach(ac => {
                         var ac_marker = marker_opts_for_ac(ac);
@@ -233,7 +232,6 @@
                             refreshed_aircraft.set(ac.session_id.join(), ac);
                         }
                     });
-                    // globePromise.then(globeAPI => {
                     var added = 0;
                     var moved = 0;
                     var deleted = 0;
@@ -245,7 +243,7 @@
                                 if (marker.position[0] != ac.lon || marker.position[1] != ac.lat) {
                                     globe.removeMarker(marker);
                                     known_ac.marker = globe.addMarker(ac.marker_opts);
-                                    known_ac.marker.element.addEventListener('click', () => { focus_aircraft(ac); });
+                                    known_ac.marker.element.addEventListener('click', () => { focus_aircraft(known_ac); });
                                     moved++;
                                 }
                             }
@@ -271,7 +269,6 @@
                     catch (error) {
                         console.error("Error processing updates:", error);
                     }
-                    // });
                 }
                 else {
                     console.error("invalid data format:", acs);
