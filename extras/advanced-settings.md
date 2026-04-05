@@ -23,6 +23,7 @@
   - [Experimental WebUI (Not Supported)](#experimental-webui-not-supported)
     - [Settings](#settings-1)
     - [URLs Served](#urls-served)
+    - [Globe](#globe)
 
 # Advanced Topics
 
@@ -740,6 +741,33 @@ The following URLs are the only ones served by the internal webserver:
 - `http://address-of-observer:port/aircraft.json` : JSON data used for the Recent Aircraft pane.
 - `http://address-of-observer:port/messages.json` : JSON data used for the Recent Messages pane
 
----
+### Globe
+
+Also potentially available is `http://address-of-observer:port/globe.html`.
+This *demonstrates* projecting known aircraft locations onto a globe. The globe is handled by [globeletjs](https://globeletjs.org).
+The map is backed by [Maptiler](https://maptiler.com).
+
+> \[!IMPORTANT\]
+> The globe requires a MapTiler API key in order to function.
+> If you don’t have one configured, things will break, and no one will be happy.
+> For personal use, the free tier is sufficient.
+
+To enable a functioning globe, you need to add a new entry to the `secondary_displays` configuration
+
+``` yaml
+cui:
+  ... # any current CUI settings here ...
+  secondary_displays:
+    - type: web
+      ... # other current web display settings here, including "aircraft"
+      maptiler_key: "MY OWN MAPTILER KEY HERE"
+```
+
+The MapTiler site advises to [protect](https://docs.maptiler.com/cloud/api/authentication-key/#get-a-protected-key-for-production) your key from being used by others.
+This is wise advice.
+
+As with the other URL, this location should not be available directly from the Internet.
+
+------------------------------------------------------------------------
 
 `pandoc -t gfm --wrap=preserve --reference-location=document --toc -s -o extras/advanced-settings.md extras/advanced-settings.md`

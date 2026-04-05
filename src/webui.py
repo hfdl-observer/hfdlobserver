@@ -114,19 +114,22 @@ class URLHandler:
             "/messages.json": ("application/json", self.get_messages_json_response),
             "/display.html": ("text/html; charset=utf-8", MainDisplayHTMLFormatter.render),
             # "/full.html": ("text/html; charset=utf-8", self.get_all_html_response),
-            "/globe.html": (
+            # "/stylesheet.css": ("text/css; charset=utf-8", URLHandler.static_file(self.source.stylesheet_path, {})),
+        }
+        if "maptiler_key" in config:
+            self.urls["/globe.html"] = (
                 "text/html; charset=utf-8",
                 URLHandler.static_file(
                     "globe.html",
                     {
-                        "{{maptiler_key}}": simple_sanitize(config.get("maptiler_key", "NO MAPTILER KEY CONFIGURED")),
+                        "{{maptiler_key}}": simple_sanitize(config["maptiler_key"]),
                         "{{home_long}}": simple_sanitize(float(aircraft_config.get("longitude", 0.00))),
                         "{{home_lat}}": simple_sanitize(float(aircraft_config.get("latitude", 0.00))),
                     },
                 ),
-            ),
-            # "/stylesheet.css": ("text/css; charset=utf-8", URLHandler.static_file(self.source.stylesheet_path, {})),
-        }
+            )
+        else:
+            logging.warning("No MapTiler key is configured; disabling URLs")
 
     def get_root(self, source: ObserverDisplay) -> str:
         return MainDisplayHTMLFormatter.render(source, LowerPaneHTMLFormatter.render(source))
