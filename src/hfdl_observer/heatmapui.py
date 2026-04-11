@@ -369,7 +369,7 @@ class HeatMap:
     renderer_available: asyncio.Event
     flexible_width: bool = False
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, *, config: dict):
         self.config = config
         mode = self.config.get("display_mode", "frequency")
         self.all_modes = {

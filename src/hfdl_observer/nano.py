@@ -95,7 +95,8 @@ class NanoPublisher:
                         message = await asyncio.wait_for(self.queue.get(), 1)
                         await service.asend(message.encode())
                     except pynng.Timeout:
-                        pass
+                        # no messages to publish, loop again to wait for more.
+                        continue
                     except QueueShutDown:
                         self.running = False
 
@@ -120,7 +121,7 @@ class NanoBroker:
     thread: Optional[threading.Thread] = None
     running: bool = False
 
-    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560) -> None:
+    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560):
         # yes, reversed
         self.pub_url = f"tcp://{host}:{sub_port}"
         self.sub_url = f"tcp://{host}:{pub_port}"
@@ -133,6 +134,7 @@ class NanoBroker:
                     try:
                         xpub.send(xsub.recv())
                     except pynng.Timeout:
+                        # Timeout is expected; continue looping so we can periodically check self.running
                         pass
 
     def start(self, daemon: bool = True) -> None:

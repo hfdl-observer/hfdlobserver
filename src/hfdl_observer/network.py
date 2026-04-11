@@ -10,7 +10,7 @@ import datetime
 import functools
 import logging
 from enum import Enum
-from typing import Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 import hfdl_observer.bus as bus
 import hfdl_observer.hfdl as hfdl
@@ -116,9 +116,8 @@ class StationAvailability:
 
 # protocol, really.
 class AbstractNetworkUpdater(bus.EventNotifier):
-    def __init__(self) -> None:
-        super().__init__()
-        self._active_ts = functools.lru_cache(maxsize=128)(self._active_ts)  # type: ignore[method-assign]
+    # def __init__(self) -> None:
+    #     self._active_ts = functools.lru_cache(maxsize=128)(self._active_ts)  # type: ignore[method-assign]
 
     async def current(self) -> Sequence[StationAvailability]:
         raise NotImplementedError()
@@ -133,8 +132,12 @@ class AbstractNetworkUpdater(bus.EventNotifier):
     # and can be reawaited... and therefore cached. There are some corner cases but none of those should appear here.
     # method is wrapped in cacher during init, though there's not really an issue with this object not getting GC'd.
     # @functools.lru_cache(maxsize=128)
-    def _active_ts(self, timestamp: int) -> asyncio.Task[Sequence[StationAvailability]]:
-        return util.schedule(self.active(util.timestamp_to_datetime(timestamp)))
+    @functools.cached_property
+    def _active_ts(self) -> Callable[[int], asyncio.Task[Sequence[StationAvailability]]]:
+        def actual_active_ts(timestamp: int) -> asyncio.Task[Sequence[StationAvailability]]:
+            return util.schedule(self.active(util.timestamp_to_datetime(timestamp)))
+
+        return functools.lru_cache(maxsize=128)(actual_active_ts)
 
     async def active_for_frame(self, at: Optional[datetime.datetime] = None) -> Sequence[StationAvailability]:
         # current/now/None should never be cached.
@@ -327,7 +330,7 @@ class StationLookup:
     by_id: dict[int, Station]
     by_freq: dict[int, Station]
 
-    def __init__(self, initial: Optional[dict[int, Station]] = None) -> None:
+    def __init__(self, *, initial: Optional[dict[int, Station]] = None):
         if initial:
             self.update(initial)
 

@@ -5,13 +5,12 @@
 #
 # flake8: noqa [W503]
 
-import asyncio
 import collections
 import functools
 import datetime
 import logging
 
-from typing import Any, Generic, Callable, Coroutine, Iterable, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Optional, Sequence
 
 import rich.console
 import rich.highlighter
@@ -27,10 +26,7 @@ import rich.text
 import hfdl_observer.baseui as baseui
 import hfdl_observer.bus as bus
 import hfdl_observer.data as data
-import hfdl_observer.heat as heat
 import hfdl_observer.heatmapui as heatmapui
-import hfdl_observer.hfdl as hfdl
-import hfdl_observer.manage as manage
 import hfdl_observer.network as network
 import hfdl_observer.settings as settings
 import hfdl_observer.util as util
@@ -319,16 +315,8 @@ class HeatMap(heatmapui.HeatMap):
         for celltext in texts:
             text, textstyle = (celltext[0] if celltext[0] else "   ", celltext[1])
             if elements and elements[-1][1] == textstyle:  # if the styles are the same, they can be merged.
-                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
-                #     text = text[1:]
                 elements[-1] = (elements[-1][0] + text, map_style(textstyle))
             else:
-                # aborted attempt to use half blocks for greater data density. It doesn't help readability, and has
-                # additional layout quirks.
-                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
-                #     text = text[1:]
-                #     elements[-1] = (elements[-1][0][:-1], elements[-1][1])
-                #     elements.append(transition(elements[-1][1], map_style(textstyle)))
                 elements.append((text, map_style(textstyle)))
         result = rich.text.Text(style=style or "")
         for element in elements:
@@ -424,7 +412,7 @@ def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
     if not (klass := SECONDARY_TYPES.get(config["type"])):
         logger.warning(f'{config["type"]} is not a valid Secondary Display; ignoring.')
         return None
-    return klass(config)
+    return klass(config=config)
 
 
 def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
@@ -438,11 +426,11 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         highlighter=rich.highlighter.NullHighlighter(),
         enable_link_path=False,
     )
-    heatmap = HeatMap(cui_settings["ticker"])
+    heatmap = HeatMap(config=cui_settings["ticker"])
     cumulative_line = baseui.CumulativeLine()
     keyboard = util.Keyboard(1.0)
 
-    forecaster = bus.RemoteURLRefresher("https://services.swpc.noaa.gov/products/noaa-scales.json", 617)
+    forecaster = bus.RemoteURLRefresher(url="https://services.swpc.noaa.gov/products/noaa-scales.json", period=617)
 
     display = ObserverDisplay(console, heatmap, keyboard, cumulative_line, forecaster)
     for entry in cui_settings.get("secondary_displays", []):
@@ -462,7 +450,9 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         handlers=handlers,
         force=True,
     )
-    display_updater = bus.PeriodicCallback(1.0 / SCREEN_REFRESH_RATE, [display.update_status, display.update], False)
+    display_updater = bus.PeriodicCallback(
+        period=1.0 / SCREEN_REFRESH_RATE, callbacks=[display.update_status, display.update], chatty=False
+    )
 
     def observing(
         observer: hfdlobserver.HFDLObserverController,

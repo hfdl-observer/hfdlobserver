@@ -10,7 +10,7 @@ import collections
 import datetime
 import logging
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import hfdl_observer.aircraft as aircraft
 import hfdl_observer.baseui as baseui
@@ -38,10 +38,11 @@ class ObserverDisplay(baseui.SecondaryObserverDisplay):
     recent_packets: collections.deque[dict]
     horizon: int = 3600
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, *, config: dict):
+        baseui.SecondaryObserverDisplay.__init__(self)
         ac_config = config.get("aircraft")
         if ac_config:
-            self.tracker = aircraft.AircraftTracker(ac_config)
+            self.tracker = aircraft.AircraftTracker(config=ac_config)
         self.recent_packets = collections.deque()
         self.uptime_text = "STARTING"
         self.current_state = {}

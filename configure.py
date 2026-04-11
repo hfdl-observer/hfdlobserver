@@ -84,7 +84,7 @@ else:
             lat = float(s)
             break
         except Exception:
-            pass
+            w.msgbox("Invalid number, please try again.")
     while True:
         s, code = w.inputbox("Enter the device's latitude (decimal. positive is east, negative is west)")
         if code == 1:
@@ -93,7 +93,7 @@ else:
             long = float(s)
             break
         except Exception:
-            pass
+            w.msgbox("Invalid number, please try again.")
     import extras.guess_station_ranking as gss
 
     station_list = list(d[1] for d in gss.guess(lat, long))

@@ -46,8 +46,8 @@ class CumulativeLine:
 
 
 class SecondaryObserverDisplay:
-    def __init__(self, config: dict) -> None:
-        pass
+    # def __init__(self, config: dict) -> None:
+    #     pass
 
     def update_heatmap(self, source: heatmapui.AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
         raise NotImplementedError(self.__class__.__name__)

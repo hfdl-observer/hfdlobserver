@@ -37,7 +37,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
     last_seen: datetime.datetime
     registered: bool = False
 
-    def __init__(self, name: str, config: collections.abc.MutableMapping) -> None:
+    def __init__(self, *, name: str, config: collections.abc.MutableMapping):
         self.uuid = str(uuid.uuid4())
         self.config = config
         self.name = name
@@ -47,8 +47,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         messaging.subscribe(self, self.target)
         messaging.subscribe(self, "/", "available")
         messaging.subscribe(self, "/", "unavailable")
-        self.watchdog = bus.PeriodicCallback(60, [self.heartbeat], chatty=False)
-        super().__init__()
+        self.watchdog = bus.PeriodicCallback(period=60, callbacks=[self.heartbeat], chatty=False)
 
     def payload(self, **data: Any) -> dict:
         _payload = {
@@ -231,9 +230,6 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
 class Web888Receiver(LocalReceiver):
     shell: bool = False
 
-    def __init__(self, name: str, config: collections.abc.MutableMapping) -> None:
-        super().__init__(name, config)
-
     def observable_widths(self) -> list[int]:
         return [int(self.config.get("channel_width", 12000))]
 
@@ -244,9 +240,11 @@ class DummyReceiver(Web888Receiver):
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.DummyClient(self.name, self.config.get("client", {}))
+            self.client = iqsources.DummyClient(name=self.name, config=self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.DummyDecoder(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.DummyDecoder(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
 
     async def run(self) -> AsyncGenerator:
         self.publish_listening()
@@ -264,7 +262,9 @@ class Web888ExecReceiver(Web888Receiver):
                 self.name, self.config.get("client", {}), int(self.config.get("channel_width", 12000))
             )
         if not self.decoder:
-            self.decoder = decoders.IQDecoderProcess(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.IQDecoderProcess(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
 
     def is_running(self) -> bool:
         return (self.client is not None and self.client.is_running()) or (
@@ -360,8 +360,7 @@ class Web888ExecReceiver(Web888Receiver):
 class ReceiverPipe(process.ProcessHarness):
     cmd: list[str]
 
-    def __init__(self, cmd: list[str]) -> None:
-        super().__init__()
+    def __init__(self, *, cmd: list[str]):
         self.shell = True
         self.cmd = cmd
 
@@ -378,9 +377,11 @@ class Web888PipeReceiver(Web888Receiver):
         if not self.client:
             self.client = iqsources.KiwiClient(self.name, self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.IQDecoder(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.IQDecoder(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
         if not self.receiver_pipe:
-            self.receiver_pipe = ReceiverPipe(self.client.commandline() + ["|"] + self.decoder.commandline())
+            self.receiver_pipe = ReceiverPipe(cmd=self.client.commandline() + ["|"] + self.decoder.commandline())
 
     async def run(self) -> AsyncGenerator:
         if self.receiver_pipe is not None:
@@ -403,7 +404,7 @@ class DirectReceiver(LocalReceiver):
         if not self.decoder:
             decoder_type = self.config["decoder"]["type"]
             decoder_class = getattr(decoders, decoder_type)
-            self.decoder = decoder_class(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoder_class(name=self.name, config=self.config.get("decoder", {}), listener=self.listener)
             if not isinstance(self.decoder, decoders.DirectDecoder):
                 raise ValueError(f"{self.decoder} is not an expected Decoder")
             self.observable_channel_widths = self.decoder.observable_channel_widths()
@@ -452,7 +453,7 @@ class DirectReceiver(LocalReceiver):
 class ReceiverNode:
     local_receivers: list[LocalReceiver]
 
-    def __init__(self, config: collections.abc.Mapping) -> None:
+    def __init__(self, *, config: collections.abc.Mapping):
         self.config = config
         self.local_receivers = []
 
@@ -460,7 +461,7 @@ class ReceiverNode:
         try:
             typename = receiver_config["type"]
             klass = globals()[typename]
-            receiver: LocalReceiver = klass(receiver_config["name"], receiver_config)
+            receiver: LocalReceiver = klass(name=receiver_config["name"], config=receiver_config)
         except KeyError:
             raise ValueError(f"Config for receiver `{receiver_config.get('receiver', '(unknown)')}` is malformed")
         receiver.watch_event("fatal", self.on_fatal_error)

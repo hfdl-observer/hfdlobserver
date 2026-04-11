@@ -36,7 +36,7 @@ class AbstractZeroBroker:
     pub_port: int
     sub_port: int
 
-    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560, **extra: Any) -> None:
+    def __init__(self, *, host: str = "*", pub_port: int = 5559, sub_port: int = 5560):
         self.host = host
         self.pub_port = pub_port
         self.sub_port = sub_port
@@ -54,7 +54,7 @@ class ZeroBroker(AbstractZeroBroker):
         sub_port: int = 5560,
         **kwargs: Any,
     ) -> None:
-        super().__init__(host, pub_port, sub_port, **kwargs)
+        AbstractZeroBroker.__init__(self, host=host, pub_port=pub_port, sub_port=sub_port)
         self.initialised = event
 
     def running(self) -> None:
@@ -85,8 +85,8 @@ class ThreadingZeroBroker(ZeroBroker):
     thread: None | threading.Thread = None
     initialised: threading.Event
 
-    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560, **kwargs: Any) -> None:
-        super().__init__(threading.Event(), host, pub_port, sub_port, **kwargs)
+    def __init__(self, *, host: str = "*", pub_port: int = 5559, sub_port: int = 5560):
+        ZeroBroker.__init__(self, threading.Event(), host=host, pub_port=pub_port, sub_port=sub_port)
 
     def start(self, daemon: bool = True) -> None:
         if not self.thread:
@@ -102,8 +102,8 @@ class MultiprocessingZeroBroker(AbstractZeroBroker):
     initialised: multiprocessing.synchronize.Event
     thread: None | threading.Thread = None
 
-    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560, **kwargs: Any) -> None:
-        super().__init__(host, pub_port, sub_port, **kwargs)
+    def __init__(self, *, host: str = "*", pub_port: int = 5559, sub_port: int = 5560, **kwargs: Any):
+        AbstractZeroBroker.__init__(self, host=host, pub_port=pub_port, sub_port=sub_port)
         self.initialised = multiprocessing.Event()
 
     def start(self, daemon: bool = True) -> None:
@@ -169,7 +169,7 @@ class ZeroSubscriber:
                 message = Message(target=target, subject=subject, payload=payload, sender=sender)
                 self.receive(message)
         except asyncio.CancelledError:
-            pass
+            logger.debug("ZeroSubscriber.run task cancelled; terminating subscription")
         finally:
             logger.debug(f"no longer subscribed to {self.url}/{self.channel}")
             util.call_soon(self._stop)

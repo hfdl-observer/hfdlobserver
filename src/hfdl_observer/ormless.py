@@ -373,7 +373,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         packet._add()
         return packet
 
-    def _recent_packets(cls, since: datetime.datetime) -> Iterable[ReceivedPacket]:
+    def _recent_packets(self, since: datetime.datetime) -> Iterable[ReceivedPacket]:
         when = to_timestamp(since)
         yield from ReceivedPacket._since(when)
 

@@ -32,13 +32,11 @@ class BaseDecoder:
     listener: hfdl_observer.data.ListenerConfig
     channel: hfdl_observer.data.ObservingChannel
     config: collections.abc.Mapping
-    # task: Optional[asyncio.Task] = None
 
-    def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
+    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
         self.name = name
         self.config = config
         self.listener = listener
-        super().__init__()
 
     @property
     def station_id(self) -> Optional[str]:
@@ -164,8 +162,8 @@ class IQDecoder(Dumphfdl):
 class IQDecoderProcess(process.ProcessHarness, IQDecoder):
     pipe: util.Pipe
 
-    def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
-        IQDecoder.__init__(self, name, config, listener)
+    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
+        IQDecoder.__init__(self, name=name, config=config, listener=listener)
         process.ProcessHarness.__init__(self)
         self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
 
@@ -191,9 +189,9 @@ class IQDecoderProcess(process.ProcessHarness, IQDecoder):
     def create_command(self) -> IQDecoderCommand:
         cmd = self.commandline()
         command = IQDecoderCommand(
-            self.logger,
-            cmd,
-            self.execution_arguments(),
+            parent_logger=self.logger,
+            cmd=cmd,
+            execution_arguments=self.execution_arguments(),
             valid_return_codes=self.valid_return_codes(),
         )
         return command
@@ -209,16 +207,16 @@ class DummyDecoder(IQDecoderProcess):
 
 
 class DirectDecoder(process.ProcessHarness, Dumphfdl):
-    def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
-        Dumphfdl.__init__(self, name, config, listener)
+    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
+        Dumphfdl.__init__(self, name=name, config=config, listener=listener)
         process.ProcessHarness.__init__(self)
         self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
 
     def create_command(self) -> DumphfdlCommand:
         command = DumphfdlCommand(
-            self.logger,
-            self.commandline(),
-            self.execution_arguments(),
+            parent_logger=self.logger,
+            cmd=self.commandline(),
+            execution_arguments=self.execution_arguments(),
             valid_return_codes=self.valid_return_codes(),
             unrecoverable_errors=[
                 "Sample buffer overrun",
@@ -246,8 +244,8 @@ class DirectDecoder(process.ProcessHarness, Dumphfdl):
 
 
 class SoapySDRDecoder(DirectDecoder):
-    def __init__(self, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig) -> None:
-        super().__init__(name, config, listener)
+    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
+        super().__init__(name=name, config=config, listener=listener)
         self.sample_rates = sorted(util.normalize_ranges(config.get("sample-rates", [])))
 
     def listen_args(self) -> list[str]:
@@ -303,8 +301,7 @@ class SoapySDRDecoder(DirectDecoder):
                 exact = sample_rate[0] != sample_rate[1]
                 logger.debug(f"sample rate {sample_rate_needed} [{sample_rate[0]}-{sample_rate[1]}] (exact? {exact})")
                 return sample_rate_needed if exact else sample_rate[1]
-        else:
-            raise ValueError(f"cannot find an acceptable sample rate for needed width {sample_rate_needed}")
+        raise ValueError(f"cannot find an acceptable sample rate for needed width {sample_rate_needed}")
 
     def observable_channel_widths(self) -> list[int]:
         shoulder = self.config.get("shoulder", 1.0)

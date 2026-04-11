@@ -41,7 +41,7 @@ def _get_by_path(source: dict, path: tuple[str, ...] | list[str], default: Any) 
 class PathingWrapper:
     backing_dict: dict
 
-    def __init__(self, backing: dict) -> None:
+    def __init__(self, backing: dict):
         self.backing_dict = backing
 
     def __getitem__(self, path: str | tuple[str, ...], default: Any = None) -> Any:
@@ -151,8 +151,7 @@ class HFDLPacketInfo(PathingWrapper):
                         if decoded:
                             return decoded
         except KeyError:
-            pass
-
+            return None
         return None
 
     @functools.cached_property

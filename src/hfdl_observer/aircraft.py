@@ -163,7 +163,7 @@ class AircraftTracker:
     horizon: int = 3600
     gate: int = 256  # number of aircraft objects before preening starts
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, *, config: dict):
         self.aircraft_by_session = {}
         self.aircraft_by_icao = {}
         self.aircraft_by_tail = {}
@@ -323,7 +323,7 @@ if __name__ == "__main__":
 
     inpath = pathlib.Path(sys.argv[1])
     intext = inpath.read_text()
-    tracker = AircraftTracker({"latitude": 60, "longitude": -40})
+    tracker = AircraftTracker(config={"latitude": 60, "longitude": -40})
     for line in intext.split("\n"):
         if not line:
             continue

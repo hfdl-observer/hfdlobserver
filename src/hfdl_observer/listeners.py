@@ -108,7 +108,7 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
             try:
                 self.transport.close()
             except RuntimeError:
-                pass
+                logger.debug("Ignoring RuntimeError while closing HFDL UDP transport during shutdown", exc_info=True)
         logger.debug("HFDL UDP listener done")
 
     def start(self, hfdl_consumers: list[HFDLPacketConsumer]) -> None:

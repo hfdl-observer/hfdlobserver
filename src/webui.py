@@ -32,8 +32,8 @@ class ObserverDisplay(jsonui.ObserverDisplay):
     stylesheet_path: pathlib.Path
     refresh_delay: int
 
-    def __init__(self, config: dict) -> None:
-        super().__init__(config)
+    def __init__(self, *, config: dict):
+        jsonui.ObserverDisplay.__init__(self, config=config)
         self.refresh_delay = int(config.get("refresh", 16))
         self.resource_path = pathlib.Path(__file__).parent.parent / "resources"
         stylesheet_name = config.get("stylesheet_path")
@@ -103,7 +103,7 @@ class URLHandler:
 
         return f
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict):
         self.config = config
         aircraft_config = config.get("aircraft", {})
 
@@ -517,7 +517,7 @@ if __name__ == "__main__":
     state = json.loads(incoming)
 
     config = {"aircraft": {"latitude": 60, "longitude": -40}, "maptiler_key": "TEST_KEY"}
-    observer_display = ObserverDisplay(config)
+    observer_display = ObserverDisplay(config=config)
     observer_display.current_state = state
     tracker = observer_display.tracker
     assert tracker

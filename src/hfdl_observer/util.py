@@ -11,6 +11,7 @@ import concurrent.futures
 import contextlib
 import dataclasses
 import datetime
+import functools
 import json
 import logging
 import math
@@ -132,20 +133,20 @@ class Pipe:
 
     def __init__(self) -> None:
         self.read, self.write = os.pipe()
-        # os.set_inheritable(self.read, True)
-        # os.set_inheritable(self.write, True)
 
     def close_read(self) -> None:
         try:
             os.close(self.read)
-        except OSError:
-            pass
+        except OSError as exc:
+            # Ignore errors when closing the read end; it may already be closed during teardown.
+            logger.debug("Ignoring OSError while closing Pipe.read: %s", exc)
 
     def close_write(self) -> None:
         try:
             os.close(self.write)
-        except OSError:
-            pass
+        except OSError as exc:
+            # Ignore errors when closing the read end; it may already be closed during teardown.
+            logger.debug("Ignoring OSError while closing Pipe.read: %s", exc)
 
     def close(self) -> None:
         self.close_write()
@@ -213,7 +214,8 @@ async def cleanup_task(task: asyncio.Task) -> None:
     try:
         await task
     except asyncio.CancelledError:
-        pass
+        # Task cancellation during cleanup is expected; ignore it.
+        logger.debug("Task %r was cancelled during cleanup", task)
     except Exception as exc:
         logger.warning(f"{task} produced {exc} on cleanup")
 
@@ -221,7 +223,7 @@ async def cleanup_task(task: asyncio.Task) -> None:
 class async_reader(contextlib.AbstractAsyncContextManager):
     transport: asyncio.ReadTransport | None = None
 
-    def __init__(self, openable: IO[Any] | None, close_on_exit: bool = True) -> None:
+    def __init__(self, openable: IO[Any] | None, close_on_exit: bool = True):
         self.openable = openable
         self.close_on_exit = close_on_exit
 
@@ -296,10 +298,9 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
 
 
 class AbstractKeyboard:
-    mappings: dict[str, Callable]
-
-    def __init__(self) -> None:
-        self.mappings = {}
+    @functools.cached_property
+    def mappings(self) -> dict[str, Callable]:
+        return {}
 
     def add_mapping(self, key: str, callback: Callable) -> None:
         self.mappings[key] = callback
@@ -317,8 +318,7 @@ class AbstractKeyboard:
 
 
 class AsyncKeyboard(AbstractKeyboard):
-    def __init__(self, pacing: float = 0) -> None:
-        super().__init__()
+    def __init__(self, pacing: float = 0):
         self.pacing = pacing
 
     async def run(self) -> None:
@@ -335,7 +335,7 @@ Keyboard = AsyncKeyboard
 
 class aclosing(contextlib.AbstractAsyncContextManager):
     # version of contextlib.aclosing that tries to relinquish running state of generator before closing it.
-    def __init__(self, thing: AsyncGenerator) -> None:
+    def __init__(self, thing: AsyncGenerator):
         self.thing = thing
 
     async def __aenter__(self) -> AsyncGenerator:

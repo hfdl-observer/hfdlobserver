@@ -20,7 +20,7 @@ class ListenerConfig:
     address: str = "127.0.0.1"
     port: int = 5542
 
-    def __init__(self, data: dict | None = None) -> None:
+    def __init__(self, data: dict | None = None):
         if data is not None:
             self.proto = data["protocol"]
             self.address = data["address"]
@@ -158,12 +158,17 @@ class FrequencyWatch:
 class BinGroup(list):
     annotations: set[int | str]
 
-    def __init__(self, num_bins: int) -> None:
+    def __init__(self, num_bins: int):
         self.annotations = set()
         super().__init__([0] * num_bins)
 
     def annotate(self, annotation: int | str) -> None:
         self.annotations.add(annotation)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, BinGroup):
+            return list.__eq__(self, other) and self.annotations == other.annotations
+        return list.__eq__(self, other)
 
 
 class AbstractPacketWatcher:
