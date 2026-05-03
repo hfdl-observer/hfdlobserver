@@ -274,6 +274,7 @@ class SoapySDRDecoder(DirectDecoder):
             ("soapysdr", "soapysdr", nested_args),
             ("gain-elements", "gain-elements", nested_args),
             ("device-settings", "device-settings", nested_args),
+            ("sample-format", "sample-format", None),
         ]
         for from_opt, to_opt, normalizer in arg_map:
             value = self.config.get(from_opt, None)

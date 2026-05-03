@@ -161,12 +161,15 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
             for frequency in frequencies or []:
                 network.set_receiver_for_frequency(frequency, self.name)
         else:
-            logger.info(
-                f"{self} bad notification. ({payload['uuid']}) {len(frequencies)} frequencies #{self.pings_sent}"
-            )
-            del payload["frequencies"]
-            messaging.publish_soon(messaging.Message(self.target, "deregister", payload))
             self.pings_sent += 1  # penalize me.
+            logger.info(
+                f"{self} unexpected notification. ({payload['uuid']}) {len(frequencies)} frequencies #{self.pings_sent}"
+            )
+            try:
+                del payload["frequencies"]
+            except KeyError:
+                logger.warning(f"receiver message without frequencies {message}")
+            messaging.publish_soon(messaging.Message(self.target, "reregister", payload))
 
     def on_remote_pong(self, message: messaging.Message) -> None:
         if self.uuid == message.payload.get("src"):

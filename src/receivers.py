@@ -81,6 +81,9 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if uuid == self.uuid:
             self.deregistered()
 
+    def on_remote_reregister(self, message: messaging.Message) -> None:
+        self.register()
+
     def on_remote_ping(self, message: messaging.Message) -> None:
         if isinstance(message.payload, str):
             uuid: str = message.payload
@@ -135,6 +138,8 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
             messaging.publish_soon(messaging.Message(self.conductor, "deregister", self.payload()))
             task = util.schedule(self.stop())
             task.add_done_callback(self.deregistered)
+        else:
+            self.deregistered()
 
     def deregistered(self, _: Any = None) -> None:
         self.registered = False
