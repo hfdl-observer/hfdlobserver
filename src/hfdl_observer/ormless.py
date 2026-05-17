@@ -10,10 +10,12 @@ import collections
 import dataclasses
 import datetime
 import functools
+import inspect
 import itertools
 import logging
 import sqlite3
-from typing import Iterable, Mapping, Optional, Sequence
+import threading
+from typing import Iterable, Mapping, Optional, Sequence, Type, TypeVar
 
 import hfdl_observer.data as data
 import hfdl_observer.hfdl as hfdl
@@ -47,15 +49,23 @@ def to_timestamp_or_none(when: None | datetime.datetime) -> int | None:
     return to_timestamp(when)
 
 
+# an explicit thread lock is required to protect DDL and DML since we use 1 connection per thread.
+# Queries run fine without locks.
+db_lock = threading.Lock()
+
+
 def db() -> sqlite3.Connection:
     try:
         _db: sqlite3.Connection = util.thread_local.db
     except AttributeError:
         dburi = settings.db["uri"]
         try:
-            _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
-            StationAvailability._table(_db)
-            ReceivedPacket._table(_db)
+            # The db_lock keeps initialize_db from being called multiple times on top of each other (or DML).
+            # db() should only be called a handful of times (one for each thread in the db executor pool).
+            with db_lock:
+                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
+                StationAvailability._table(_db)
+                ReceivedPacket._table(_db)
         except Exception as err:
             logger.error(f"Error opening database: {err}", exc_info=err)
             util.shutdown()
@@ -76,6 +86,10 @@ class Table:
 
     @classmethod
     def preprocess_data(cls, data: dict) -> None:
+        pass
+
+    @classmethod
+    def _already_ran(cls, _db: sqlite3.Connection) -> None:
         pass
 
 
@@ -100,6 +114,8 @@ class StationAvailability(Table):
 
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
+        # this method should run only once.
+        cls._table = cls._already_ran  # type: ignore[method-assign]
         _db.execute("""
             CREATE TABLE IF NOT EXISTS StationAvailability (
             station_id INTEGER NOT NULL,
@@ -114,7 +130,7 @@ class StationAvailability(Table):
         """)
         _db.execute("""
             CREATE INDEX IF NOT EXISTS index_StationAvailability
-            ON StationAvailability (station_id, stratum, valid_at_frame, valid_to_frame);
+            ON StationAvailability (station_id, valid_at_frame, valid_to_frame, stratum);
         """)
         _db.execute("""
             CREATE TRIGGER IF NOT EXISTS StationAvailabilityPrune AFTER INSERT on StationAvailability
@@ -142,16 +158,17 @@ class StationAvailability(Table):
         sql += "(station_id, stratum, frequencies, agent, from_station, valid_at_frame, valid_to_frame) "
         sql += "VALUES(?, ?, ?, ?, ?, ?, ?);"
         with db() as conn:
-            data = (
-                base.station_id,
-                base.stratum,
-                ",".join(str(f) for f in base.frequencies),
-                base.agent,
-                base.from_station,
-                base.valid_at_frame,
-                base.valid_to_frame,
-            )
-            conn.execute(sql, data)
+            with db_lock:
+                data = (
+                    base.station_id,
+                    base.stratum,
+                    ",".join(str(f) for f in base.frequencies),
+                    base.agent,
+                    base.from_station,
+                    base.valid_at_frame,
+                    base.valid_to_frame,
+                )
+                conn.execute(sql, data)
         return True
 
     @classmethod
@@ -174,6 +191,17 @@ class StationAvailability(Table):
         return local_row
 
 
+QUERY_FRAGMENTS = {
+    "trunc(frequency / 1000)",
+}
+BinCounterT = TypeVar("BinCounterT")
+FrequencyStationCounter = collections.namedtuple("FrequencyStationCounter", ["frequency", "ground_station", "count"])
+BandCounter = collections.namedtuple("BandCounter", ["band", "count"])
+AgentCounter = collections.namedtuple("AgentCounter", ["agent", "count"])
+StationCounter = collections.namedtuple("StationCounter", ["ground_station", "count"])
+ReceiverCounter = collections.namedtuple("ReceiverCounter", ["receiver", "count"])
+
+
 @dataclasses.dataclass
 class ReceivedPacket(Table):
     received: int
@@ -189,6 +217,8 @@ class ReceivedPacket(Table):
 
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
+        # this method should run only once.
+        cls._table = cls._already_ran  # type: ignore[method-assign]
         with _db as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS ReceivedPacket (
@@ -204,6 +234,9 @@ class ReceivedPacket(Table):
                 freq_active SMALLINT NULL,
                 PRIMARY KEY(received, frequency)
                 );
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS ReceivedPacketWhen ON ReceivedPacket (received desc);
             """)
             try:
                 conn.execute("ALTER TABLE ReceivedPacket ADD COLUMN freq_active SMALLINT NULL")
@@ -236,19 +269,20 @@ class ReceivedPacket(Table):
         sql += "(received, agent, ground_station, frequency, kind, uplink, latitude, longitude, receiver, freq_active) "
         sql += "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         with db() as conn:
-            data = (
-                self.received,
-                self.agent,
-                self.ground_station,
-                self.frequency,
-                self.kind,
-                self.uplink,
-                self.latitude,
-                self.longitude,
-                self.receiver,
-                self.freq_active,
-            )
-            conn.execute(sql, data)
+            with db_lock:
+                data = (
+                    self.received,
+                    self.agent,
+                    self.ground_station,
+                    self.frequency,
+                    self.kind,
+                    self.uplink,
+                    self.latitude,
+                    self.longitude,
+                    self.receiver,
+                    self.freq_active,
+                )
+                conn.execute(sql, data)
         return False
 
     @classmethod
@@ -303,6 +337,34 @@ class ReceivedPacket(Table):
         cutoff = when - datetime.timedelta(days=limit)
         counts: list[int] = await util.in_db_thread(cls._daily_counts, to_timestamp(when), to_timestamp(cutoff), limit)
         return counts
+
+    @classmethod
+    def _binned_counters(
+        cls, bin_class: Type[BinCounterT], since: int, bin_size: int, *params: str
+    ) -> Sequence[tuple[int, BinCounterT]]:
+
+        # only allow certain strings to be used, to protect against hypothetical injections.
+        fields = set(dict(inspect.getmembers(cls))["__dataclass_fields__"].keys())
+        for param in params:
+            if param not in fields and param not in QUERY_FRAGMENTS:
+                raise ValueError(f"invalid {cls.__name__} column name '{param}'")
+
+        def factory(cursor: sqlite3.Cursor, row: Sequence) -> tuple[int, BinCounterT]:
+            return (int(row[0]), bin_class(*row[1:]))
+
+        factor = TS_FACTOR * bin_size
+        columns = [f"floor((? - received) / ?)"] + list(params) + ["count(*)"]
+        groups = ",".join(str(i) for i in range(1, len(columns)))
+
+        # This is an assembled query, which might suggest injection possibilities. However...
+        # Every element is either constructed in this method, or is a field name in the class or in QUERY_FRAGMENT.
+        query = f"SELECT {','.join(columns)} FROM ReceivedPacket WHERE received > ? GROUP BY {groups}"
+        result: list[tuple[int, BinCounterT]] = []
+        with db() as conn:
+            conn.row_factory = factory
+            for row in conn.execute(query, [since, factor, since]):
+                result.append(row)
+        return result
 
 
 class NetworkUpdater(network.AbstractNetworkUpdater):
@@ -368,7 +430,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
             latitude=position[0],
             longitude=position[1],
             receiver=network.receiver_for(packet_info.frequency),
-            freq_active=network.STATIONS[packet_info.ground_station["id"]].is_active(packet_info.frequency)
+            freq_active=network.STATIONS[packet_info.ground_station["id"]].is_active(packet_info.frequency),
         )
         packet._add()
         return packet
@@ -399,12 +461,15 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[tuple[int, int], data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self._binned_recent_packets(when, bin_size):
-            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
-            group = _data[(packet.frequency, station_id)]
+        counters = ReceivedPacket._binned_counters(
+            FrequencyStationCounter, to_timestamp(when), bin_size, "frequency", "ground_station"
+        )
+        for bin_number, counter in counters:
+            station_id = counter.ground_station or network.STATIONS[counter.frequency].station_id
+            group = _data[(counter.frequency, station_id)]
             group.annotate(station_id)
             try:
-                group[bin_number] += 1
+                group[bin_number] = counter.count
             except IndexError:
                 logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
@@ -417,11 +482,13 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self._binned_recent_packets(when, bin_size):
-            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
-            group = _data[packet.agent or "unknown"]
-            group.annotate(station_id)
-            group[bin_number] += 1
+        counters = ReceivedPacket._binned_counters(AgentCounter, to_timestamp(when), bin_size, "agent")
+        for bin_number, counter in counters:
+            group = _data[counter.agent or "unknown"]
+            try:
+                group[bin_number] = counter.count
+            except IndexError:
+                logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
 
     async def packets_by_station(self, bin_size: int, num_bins: int) -> Mapping[int, data.BinGroup]:
@@ -432,11 +499,15 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[int, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self._binned_recent_packets(when, bin_size):
-            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
+        counters = ReceivedPacket._binned_counters(StationCounter, to_timestamp(when), bin_size, "ground_station")
+        for bin_number, counter in counters:
+            station_id = counter.ground_station  # MAYBE?: or network.STATIONS[packet.frequency].station_id
             group = _data[station_id]
             group.annotate(station_id)
-            group[bin_number] += 1
+            try:
+                group[bin_number] = counter.count
+            except IndexError:
+                logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
 
     async def packets_by_band(self, bin_size: int, num_bins: int) -> Mapping[int, data.BinGroup]:
@@ -447,11 +518,13 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[int, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self._binned_recent_packets(when, bin_size):
-            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
-            group = _data[packet.frequency // 1000]
-            group.annotate(station_id)
-            group[bin_number] += 1
+        counters = ReceivedPacket._binned_counters(BandCounter, to_timestamp(when), bin_size, "trunc(frequency / 1000)")
+        for bin_number, counter in counters:
+            group = _data[counter.band]
+            try:
+                group[bin_number] = counter.count
+            except IndexError:
+                logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
 
     async def packets_by_receiver(self, bin_size: int, num_bins: int) -> Mapping[str, data.BinGroup]:
@@ -462,11 +535,13 @@ class PacketWatcher(data.AbstractPacketWatcher):
         _data: dict[str, data.BinGroup] = collections.defaultdict(lambda: data.BinGroup(num_bins))
         total_seconds = bin_size * num_bins
         when = util.now() - datetime.timedelta(seconds=total_seconds)
-        for bin_number, packet in self._binned_recent_packets(when, bin_size):
-            station_id = packet.ground_station or network.STATIONS[packet.frequency].station_id
-            group = _data[packet.receiver]
-            group.annotate(station_id)
-            group[bin_number] += 1
+        counters = ReceivedPacket._binned_counters(ReceiverCounter, to_timestamp(when), bin_size, "receiver")
+        for bin_number, counter in counters:
+            group = _data[counter.receiver]
+            try:
+                group[bin_number] = counter.count
+            except IndexError:
+                logging.error(f"unknown bin number {bin_number} {num_bins}")
         return _data
 
     async def count_packets_since(self, since: datetime.timedelta) -> int | None:
