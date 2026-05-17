@@ -467,8 +467,8 @@ class PullReceiver(LocalReceiver):
     running: bool = False
 
     def setup_harnesses(self) -> None:
-        self.remote_host = self.config['remote_host']
-        self.remote_port = int(self.config['remote_port'])
+        self.remote_host = self.config["remote_host"]
+        self.remote_port = int(self.config["remote_port"])
 
     def is_running(self) -> bool:
         return self.reader is not None or self.writer is not None

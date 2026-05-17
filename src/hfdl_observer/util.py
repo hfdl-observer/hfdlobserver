@@ -346,7 +346,6 @@ class aclosing(contextlib.AbstractAsyncContextManager):
         await self.thing.aclose()
 
 
-
 @functools.cache
 def thread_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
     return concurrent.futures.ThreadPoolExecutor(max_workers=96)
@@ -439,10 +438,9 @@ def bearing(origin: tuple[float, float], destination: tuple[float, float]) -> fl
     dst_lat, dst_lon = destination
     d_lon = math.radians(dst_lon - src_lon)
     y = math.sin(d_lon) * math.cos(math.radians(dst_lat))
-    x = (
-        math.cos(math.radians(src_lat)) * math.sin(math.radians(dst_lat))
-        - math.sin(math.radians(src_lat)) * math.cos(math.radians(dst_lat)) * math.cos(d_lon)
-    )
+    x = math.cos(math.radians(src_lat)) * math.sin(math.radians(dst_lat)) - math.sin(math.radians(src_lat)) * math.cos(
+        math.radians(dst_lat)
+    ) * math.cos(d_lon)
     heading = math.atan2(y, x)
     heading = math.degrees(heading)
     heading = (heading + 360) % 360

@@ -355,7 +355,7 @@ class StationLookup:
                 station.observed_frequencies.add(frequency)
                 self.refresh()
         else:
-            logger.info(f'StationLookup not fully initialised. Dropping {sid}/{frequency}.')
+            logger.info(f"StationLookup not fully initialised. Dropping {sid}/{frequency}.")
 
     def refresh(self) -> None:
         self.by_freq = {}

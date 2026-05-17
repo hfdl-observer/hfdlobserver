@@ -85,7 +85,7 @@ FORECAST_TIPS = {
 
 def simple_sanitize(value: Any) -> str:
     if value is None:
-        return ''
+        return ""
     return re.sub(r"[^a-zA-Z0-9 .,_-]", "", str(value))
 
 

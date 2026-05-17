@@ -54,11 +54,7 @@ class RowHeader(Taggable):
         return f"{self.tags_as_str()} {sid}{self.label}"
 
     def as_dict(self) -> dict:
-        return {
-            "value": self.label,
-            "station_id": self.station_id,
-            "tags": list(self._tags or [])
-        }
+        return {"value": self.label, "station_id": self.station_id, "tags": list(self._tags or [])}
 
 
 class ColumnHeader:
@@ -91,10 +87,7 @@ class Cell(Taggable):
         return f"{self.value}{self.tags_as_str()}"
 
     def as_dict(self) -> dict:
-        return {
-            "value": self.value,
-            "tags": list(self._tags or [])
-        }
+        return {"value": self.value, "tags": list(self._tags or [])}
 
 
 class Table(Generic[TableKeyT]):

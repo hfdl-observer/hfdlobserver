@@ -566,14 +566,14 @@ class Reaper(bus.EventNotifier):
 
 
 ORCHESTRATOR_LOOKUP = {
-    'diverse': DiverseOrchestrator,
-    'static': StaticOrchestrator,
-    'bfi': BFIOrchestrator,
+    "diverse": DiverseOrchestrator,
+    "static": StaticOrchestrator,
+    "bfi": BFIOrchestrator,
 }
 
 
 def pick_orchestrator(conductor_config: dict) -> AbstractOrchestrator:
-    orchestrator_type = conductor_config.get('type', 'diverse')
+    orchestrator_type = conductor_config.get("type", "diverse")
     klass = ORCHESTRATOR_LOOKUP[orchestrator_type]
     return klass(config=conductor_config)
 

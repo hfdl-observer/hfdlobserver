@@ -187,7 +187,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         for secondary in self.secondary_displays:
             secondary.update_cumulative(self.cumulative_line, cumulative)
 
-
     def update_log(self, ring: collections.deque) -> None:
         # WARNING: do not use any logger from within this method.
         if self.tty:
@@ -254,7 +253,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
 
         for secondary in self.secondary_displays:
             secondary.update_forecast(forecast)
-
 
     @property
     def current_width(self) -> int:
@@ -412,10 +410,10 @@ def exit(*_: Any) -> None:
 
 def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
     SECONDARY_TYPES = {
-        "web" : webui.ObserverDisplay,
+        "web": webui.ObserverDisplay,
     }
     if not (klass := SECONDARY_TYPES.get(config["type"])):
-        logger.warning(f'{config["type"]} is not a valid Secondary Display; ignoring.')
+        logger.warning(f"{config['type']} is not a valid Secondary Display; ignoring.")
         return None
     return klass(config=config)
 
