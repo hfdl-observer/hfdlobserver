@@ -3,9 +3,11 @@
 # see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
+from __future__ import annotations
 
 import datetime
 import functools
+import json
 import logging
 
 from typing import Any, Optional, Sequence
@@ -33,7 +35,7 @@ def _get_by_path(source: dict, path: tuple[str, ...] | list[str], default: Any) 
         node = source[car]
     except (KeyError, AttributeError, IndexError):
         return default
-    if cdr:
+    if cdr and node:
         return _get_by_path(node, cdr, default)
     return node
 
@@ -365,3 +367,19 @@ class HFDLPacketInfo(PathingWrapper):
             else:
                 direction = "FROM" if self.is_uplink else "TO"
         return f"<HFDL/{sub} {station}@{self.timestamp} {self.frequency}kHz ({self.snr:.1f}dB){_id} {direction} {gs}>"
+
+    @classmethod
+    def from_raw(cls, raw_packet: str) -> HFDLPacketInfo | None:
+        line = raw_packet.strip()
+        if not line.startswith("{"):
+            logger.debug(f"dropping garbage: {line}")
+            return None
+        try:
+            packet_data = json.loads(line)
+        except json.JSONDecodeError as err:
+            logger.warn(f"dropping garbage: {line}", exc_info=err)
+        else:
+            packet = cls(packet_data)
+            logger.info(f"packet {packet}")
+            return packet
+        return None

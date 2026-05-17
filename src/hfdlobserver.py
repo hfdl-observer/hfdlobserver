@@ -107,6 +107,12 @@ class HFDLObserverController(receivers.ReceiverNode, manage.ConductorNode):
     def on_hfdl(self, packet: hfdl_observer.hfdl.HFDLPacketInfo) -> None:
         self.notify_event("packet", packet)
 
+    def on_local_hfdl_packet(self, packet: hfdl_observer.hfdl.HFDLPacketInfo) -> None:
+        if packet.spdu:
+            network.UPDATER.on_hfdl(packet)
+        self.on_hfdl(packet)
+        self.packet_watcher.on_hfdl(packet)
+
     def on_fatal_error(self, data: tuple[str, str]) -> None:
         receiver, error = data
         logger.error(f"Bailing due to error on receiver {receiver}: {error}")

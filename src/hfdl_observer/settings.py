@@ -222,6 +222,7 @@ defaults: dict[str, Any] = {
         },
         "pipe888": {"type": "Web888PipeReceiver", "client": {"type": "KiwiClient"}, "decoder": {"type": "IQDecoder"}},
         "dummy": {"type": "DummyReceiver"},
+        "acars_router": {"type": "PullReceiver"},
         "airspyhf": {
             "type": "DirectReceiver",
             "decoder": {
