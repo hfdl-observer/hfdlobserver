@@ -331,34 +331,31 @@ class StationLookup:
     by_freq: dict[int, Station]
 
     def __init__(self, *, initial: Optional[dict[int, Station]] = None):
-        if initial:
-            self.update(initial)
+        self.by_id = {}
+        self.update(initial or {})
 
     def update(self, systable: dict[int, Station]) -> None:
-        if hasattr(self, "by_id"):
-            for sid, station in systable.items():
-                current = self.by_id.setdefault(sid, station)
-                current.update(station)
-        else:
-            self.by_id = systable
-        self.refresh()
+        for sid, station in systable.items():
+            current = self.by_id.setdefault(sid, station)
+            current.update(station)
+        if self.by_id:
+            self.refresh()
 
     def update_active(self, availabilities: Sequence[StationAvailability]) -> None:
-        if hasattr(self, "by_id"):
+        if self.by_id:
             for availability in availabilities:
                 self[availability.station_id].update_active(availability.frequencies)
             self.refresh()
 
     def add_observed(self, sid: int, frequency: int) -> None:
-        try:
+        if self.by_id:
             station = self.by_id[sid]
-        except AttributeError:
-            logger.info(f'StationLookup not fully initialised. Dropping {sid}/{frequency}.')
-        else:
             station.observed_frequencies = station.observed_frequencies or set()
             if frequency not in station.observed_frequencies:
                 station.observed_frequencies.add(frequency)
                 self.refresh()
+        else:
+            logger.info(f'StationLookup not fully initialised. Dropping {sid}/{frequency}.')
 
     def refresh(self) -> None:
         self.by_freq = {}
@@ -415,3 +412,7 @@ def receiver_for(frequency: int) -> str:
 
 def set_receiver_for_frequency(frequency: int, receiver: str) -> None:
     RECEIVER_FREQUENCIES[frequency] = receiver
+
+
+def default_receiver_for_frequency(frequency: int, receiver: str) -> None:
+    RECEIVER_FREQUENCIES.setdefault(frequency, receiver)
