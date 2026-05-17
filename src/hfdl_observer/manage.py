@@ -219,7 +219,9 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
 
     def __init__(self, *, config: dict):
         self.config = config
-        self.ranked_station_ids = config["ranked_stations"]
+        self.ranked_station_ids = config.get("ranked_stations", [])
+        if not self.ranked_station_ids:
+            logger.warning("No ranked stations configured.")
         ignores = config.get("ignored_frequencies", [])
         self.ignored_frequencies = util.normalize_ranges(ignores)
         self.proxies = []
