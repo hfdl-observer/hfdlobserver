@@ -294,8 +294,10 @@ def map_style(style: str) -> rich.style.Style | None:
         return None
     if style.startswith("rgb("):
         rgb = tuple(int(x) for x in style[4:-1].split(","))
-        return rich.style.Style(bgcolor=f"rgb({','.join(str(i) for i in rgb)})", color="black")
-    return STYLES[style]
+        s = rich.style.Style(bgcolor=f"rgb({','.join(str(i) for i in rgb)})", color="black")
+    else:
+        s = STYLES[style]
+    return s
 
 
 def transition(
@@ -311,16 +313,16 @@ def transition(
 
 class HeatMap(heatmapui.HeatMap):
     def celltexts_to_text(self, texts: list[heatmapui.CellText], style: Optional[rich.style.Style] = None) -> Sequence:
-        elements: list[tuple[str, rich.style.Style | None]] = []
+        elements: list[tuple[str, str | None]] = []
         for celltext in texts:
             text, textstyle = (celltext[0] if celltext[0] else "   ", celltext[1])
             if elements and elements[-1][1] == textstyle:  # if the styles are the same, they can be merged.
-                elements[-1] = (elements[-1][0] + text, map_style(textstyle))
+                elements[-1] = (elements[-1][0] + text, textstyle)
             else:
-                elements.append((text, map_style(textstyle)))
+                elements.append((text, textstyle))
         result = rich.text.Text(style=style or "")
         for element in elements:
-            result.append(*element)
+            result.append(element[0], map_style(element[1]))
         return [result]
 
     def render_column_headers(
@@ -359,6 +361,9 @@ class HeatMap(heatmapui.HeatMap):
         if not any_rows:
             rows.append((" Awaiting data...", "NORMAL_TEXT"))
         return rows
+
+    def render_empty_map(self, head: str, width: int) -> Sequence:
+        return ["no data"]
 
 
 class ConsoleRedirector(rich.console.Console):
