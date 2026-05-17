@@ -346,40 +346,47 @@ class aclosing(contextlib.AbstractAsyncContextManager):
         await self.thing.aclose()
 
 
+
+@functools.cache
+def thread_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=96)
+
+
+@functools.cache
+def ui_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+
+@functools.cache
+def db_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=5)
+
+
 async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "executor"):
-        thread_local.executor = concurrent.futures.ThreadPoolExecutor(max_workers=96)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(thread_executor(loop), run)
 
 
 async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "db_executor"):
-        thread_local.db_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.db_executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(db_executor(loop), run)
 
 
 async def in_ui_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "ui_executor"):
-        thread_local.ui_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.ui_executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(ui_executor(loop), run)
 
 
 def is_shutting_down() -> bool:
