@@ -24,6 +24,7 @@
     - [Settings](#settings-1)
     - [URLs Served](#urls-served)
     - [Globe](#globe)
+  - [ACARS Router Viewer (Experimental)](#acars-router-viewer-experimental)
 
 # Advanced Topics
 
@@ -619,11 +620,38 @@ observer:
 
 ## Running as a Traffic Viewer (tbd)
 
-TBD
+> \[!IMPORTANT\]
+> This section is incomplete.
+
+1.  Define an `hfdl_listener` described above (or use the defaults).
+    Self-managed `dumphfdl` instances can configure the host and port as a `json:udp:address=ABC:port=1234567` output (`--output`) on its command line.
+2.  Configure HFDLObserver to pull packets to display from an ACARS Router instance.
+    See [ACARS Router Viewer (Experimental)](#acars_router_viewer_experimental)
 
 ## Running as a remote “node”
 
-TBD
+> \[!IMPORTANT\]
+> This section is incomplete.
+
+1.  Ensure there is a [`messaging`](#messaging) section configured on the main display/control instance.
+2.  Configure each “remote” node with a simpler `settings.yaml`.
+    It needs to contain `local_receivers` (and everything needed to support that for your configuration) plus a `node` section like this:
+
+``` yaml
+node:
+  messaging:
+    host: <main HFDLObserver messaging IP>
+    port: <main HFDLObserver messaging PORT>
+  local_receivers:
+    - ...
+```
+
+The main HFDLObserver node is run as normal.
+Each remote node needs the `--node` argument
+
+``` bash
+$ ./hfdlobserver.sh --node --log ...
+```
 
 ## Experimental Conductor Options (Not Supported)
 
@@ -767,6 +795,43 @@ The MapTiler site advises to [protect](https://docs.maptiler.com/cloud/api/authe
 This is wise advice.
 
 As with the other URL, this location should not be available directly from the Internet.
+
+## ACARS Router Viewer (Experimental)
+
+It is possible to configure HFDLObserver to view packets processed by (for example) ACARS Router.
+This consists of a “Pull” receiver type, and the use of the “Static” conductor type described above.
+In this mode, there are no active receivers, and no actual management of selected frequencies.
+The HFDL Observer instance retrieves incoming packets from ACARS Router
+
+The PullReceiver is a simple receiver type that connects to a TCP port and waits for JSON format HFDL packets.
+You need to do is provide the host name (or address) and the port that Acars Router is configured to send HFDL JSON packets on.
+(This is the `AR_SERVE_TCP_HFDL` env var in an Acars Router configuration.
+Also note that if Acars Router is running inside a container, that port may need to be forwarded to the container.)
+
+``` yaml
+receivers:
+  acars_router:
+    type: PullReceiver
+    remote_host: acars_router.local
+    remote_port: <AR_SERVE_TCP_HFDL CONFIGURED PORT>
+observer:
+  local_receivers:
+    - receiver: acars_router
+      name: acars_router
+  conductor:
+    type: static
+    static_allocations:
+      'acars_router': []
+  tracker:
+    station_updates:
+      - url: "https://hfdl.observer/active.json"
+        period: 61
+cui:
+  ...  # normal CUI configuration
+```
+
+The definition of a static allocation (an empty list) for the `acars_router` “receiver” is required.
+The static conductor needs to know which receiver objects to initialise.
 
 ------------------------------------------------------------------------
 
