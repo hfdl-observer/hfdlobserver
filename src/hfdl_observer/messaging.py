@@ -8,7 +8,7 @@ import asyncio
 import functools
 import logging
 import weakref
-from typing import Any, Callable
+from typing import Callable
 
 import hfdl_observer.util as util
 import hfdl_observer.zero as zero

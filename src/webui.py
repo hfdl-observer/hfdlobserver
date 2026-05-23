@@ -472,7 +472,7 @@ class RecentMessagesHTMLFormatter:
 
 class LowerPaneHTMLFormatter:
     @classmethod
-    def render(self, source: ObserverDisplay) -> str:
+    def render(cls, source: ObserverDisplay) -> str:
         return f"""
 <div class="hfdl_container">
     <div class="column" id="aircraft">{RecentAircraftHTMLFormatter.render(source)}</div>
@@ -508,7 +508,6 @@ class NaiveHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    import logging
     import sys
 
     import hfdl_observer.hfdl as hfdl

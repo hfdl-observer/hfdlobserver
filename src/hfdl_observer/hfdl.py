@@ -73,7 +73,8 @@ class HFDLPacketInfo(PathingWrapper):
     def __init__(self, packet: dict[str, Any]):
         # Not at all a full extraction of a packet.
         packet = packet.get("hfdl", packet)  # in case it's not unwrapped.
-        self.backing_dict = self.packet = packet
+        super().__init__(backing=packet)
+        self.packet = packet
         self.received = datetime.datetime.now().timestamp()
         self.timestamp = packet["t"]["sec"]
         self.frequency = packet["freq"] // 1000
@@ -190,8 +191,7 @@ class HFDLPacketInfo(PathingWrapper):
         for key in ["ac_info.icao", "src.ac_info.icao", "dst.ac_info.icao"]:
             if hex_id := self.lpdu[key]:
                 return str(hex_id)
-        else:
-            return None
+        return None
 
     @functools.cached_property
     def flight(self) -> str | None:

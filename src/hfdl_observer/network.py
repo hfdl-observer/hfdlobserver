@@ -10,7 +10,7 @@ import datetime
 import functools
 import logging
 from enum import Enum
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union
 
 import hfdl_observer.bus as bus
 import hfdl_observer.hfdl as hfdl
@@ -116,9 +116,6 @@ class StationAvailability:
 
 # protocol, really.
 class AbstractNetworkUpdater(bus.EventNotifier):
-    # def __init__(self) -> None:
-    #     self._active_ts = functools.lru_cache(maxsize=128)(self._active_ts)  # type: ignore[method-assign]
-
     async def current(self) -> Sequence[StationAvailability]:
         raise NotImplementedError()
 

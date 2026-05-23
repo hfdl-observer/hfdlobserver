@@ -10,7 +10,7 @@ import collections
 import datetime
 import logging
 
-from typing import Any, Sequence
+from typing import Sequence
 
 import hfdl_observer.aircraft as aircraft
 import hfdl_observer.baseui as baseui
