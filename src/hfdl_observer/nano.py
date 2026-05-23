@@ -47,6 +47,7 @@ class NanoSubscriber:
                     try:
                         data = await service.arecv()
                     except pynng.Timeout:
+                        # ignore timeouts.
                         pass
                     else:
                         if data:

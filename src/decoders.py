@@ -88,6 +88,7 @@ class Dumphfdl(BaseDecoder):
                 ]
             )
         except KeyError:
+            # statsd is optional.
             pass
         # Add a special output that sends to our local listener. We could do this through pipes, but this may be
         # simpler for multiple receivers, especially remote ones.
@@ -120,6 +121,7 @@ class Dumphfdl(BaseDecoder):
         try:
             packetlog = env.as_path(self.config["packetlog"])
         except KeyError:
+            # packet logging is optional.
             pass
         else:
             if packetlog.is_dir():

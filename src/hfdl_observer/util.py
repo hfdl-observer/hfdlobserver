@@ -312,6 +312,7 @@ class AbstractKeyboard:
         try:
             callback = self.mappings[key]
         except KeyError:
+            # error on key stroke mapping. ignore the keystroke and wait for the next one.
             pass
         else:
             call_soon_threadsafe(callback, key)

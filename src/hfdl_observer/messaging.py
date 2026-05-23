@@ -90,8 +90,6 @@ class GenericSubscriber(AbstractSubscriber):
         if callable(handler):
             logger.debug(f"dispatching {message} via {handler}")
             handler(message)
-        else:
-            pass
 
 
 class Subscription:

@@ -54,7 +54,7 @@ class NetworkOverview(bus.EventNotifier):
             try:
                 previous = json.loads(self.save_path.read_text())
             except (json.JSONDecodeError, IOError):
-                pass
+                logging.warning("ignoring state file load; starting with new file.")
             else:
                 logger.debug("loading previous state")
                 updater.on_community(previous)

@@ -180,9 +180,7 @@ defaults: dict[str, Any] = {
             "shoulder": 0.8,
             "system_table": "systable.conf",
             "system_table_save": "systable_updated.conf",
-            "output": [
-                {"output": "hfdl_observer"},
-            ],
+            "output": [],
         }
     },
     "outputs": {

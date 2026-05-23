@@ -332,6 +332,7 @@ class StationLookup:
 
     def __init__(self, *, initial: Optional[dict[int, Station]] = None):
         self.by_id = {}
+        self.by_freq = {}
         self.update(initial or {})
 
     def update(self, systable: dict[int, Station]) -> None:
