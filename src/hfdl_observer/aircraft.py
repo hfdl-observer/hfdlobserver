@@ -171,7 +171,7 @@ class AircraftTracker:
         self.home_lat = config.get("latitude")
         self.home_lon = config.get("longitude")
         self.horizon = config.get("horizon", 3600)
-        self.gate = config.get("max_tracked", 1024)
+        self.gate = config.get("max_tracked", 512)
 
     def register(self, observer: bus.EventNotifier) -> None:
         logging.info("registering aircraft tracker")

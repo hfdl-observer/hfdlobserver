@@ -476,9 +476,18 @@ class PullReceiver(LocalReceiver):
     async def run(self) -> AsyncGenerator:
         self.running = True
         self.publish_listening()
+        try:
+            async for thing in self._run():
+                yield thing
+        finally:
+            self.running = False
+            self.frequencies = []
+
+    async def _run(self) -> AsyncGenerator:
         while self.running:
             try:
                 yield process.CommandState("preparing")
+                self.logger.info("will connect")
                 await self.connect()
                 if self.reader and self.writer:
                     yield process.CommandState("running")
@@ -489,30 +498,32 @@ class PullReceiver(LocalReceiver):
                         if packet:
                             network.default_receiver_for_frequency(packet.frequency, self.name)
                             self.notify_event("hfdl", packet)
+                    self.logger.info("end of file")
                     await self.disconnect()
-                yield process.CommandState("done")
             except asyncio.CancelledError:
-                logger.debug(f"{self} cancelled")
+                self.logger.info("cancelled")
                 yield process.CommandState("cancelled")
                 break
             except Exception as err:
-                logger.info(f"{self} encountered an error", exc_info=err)
-                process.CommandState("error")
+                self.logger.info("encountered an error", exc_info=err)
+                yield process.CommandState("error")
                 await asyncio.sleep(5)
+        yield process.CommandState("done")
 
     async def stop(self) -> None:
         self.running = False
-        self.logger.debug("Stopping")
+        self.logger.info(f"Stopping {self}")
         await self.disconnect()
 
     async def connect(self) -> None:
         if self.writer:
-            logger.warning(f"{self.name} is already connected")
+            self.logger.warning(f"{self.name} is already connected")
         else:
             self.reader, self.writer = await asyncio.open_connection(self.remote_host, self.remote_port)
 
     async def disconnect(self) -> None:
         if self.writer:
+            self.logger.info("will disconnect")
             self.writer.close()
             self.writer = None
             self.reader = None
@@ -522,14 +533,14 @@ class PullReceiver(LocalReceiver):
 
     def clear(self) -> None:
         if not self.is_running():
-            logger.debug(f"{self.name} has no connection, clearing.")
+            self.logger.debug(f"{self.name} has no connection, clearing.")
             if self.reader:
                 self.reader = None
             if self.writer:
                 self.writer = None
             super().clear()
         else:
-            logger.debug(f"{self.name} still has a valid connection, not clearing")
+            self.logger.debug(f"{self.name} still has a valid connection, not clearing")
 
     def describe_components(self) -> list[str]:
         return [f"{self.name} @ tcp:{self.remote_host}:{self.remote_port}"]

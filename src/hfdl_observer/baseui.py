@@ -5,6 +5,7 @@
 #
 from __future__ import annotations
 
+import datetime
 import functools
 import logging
 
@@ -12,6 +13,7 @@ from typing import Any, Optional, Sequence
 
 import hfdlobserver
 import hfdl_observer.bus as bus
+import hfdl_observer.data as data
 import hfdl_observer.heatmapui as heatmapui
 import hfdl_observer.network as network
 import hfdl_observer.util as util
@@ -139,3 +141,44 @@ class BaseObserverDisplay:
     def will_render(self, source: heatmapui.AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
         for secondary in self.secondary_displays:
             secondary.update_heatmap(source, cells_visible, bin_str)
+
+
+class PrimaryDisplay(BaseObserverDisplay, heatmapui.HeatMapConsumer):
+    day_count: int | None = None
+    week_count: int | None = None
+    spark_data: Sequence[int] | None = None
+
+    def __init__(
+        self,
+        heatmap: heatmapui.HeatMap,
+        cumulative_line: CumulativeLine,
+        forecaster: bus.RemoteURLRefresher,
+    ) -> None:
+        self.heatmap = heatmap
+        self.cumulative_line = cumulative_line
+        self.heatmap.display = self
+        self.cumulative_line.display = self
+        self.secondary_displays = []
+        forecaster.watch_event("response", self.on_forecast)
+
+    def on_forecast(self, forecast: Any) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update_forecast(forecast)
+
+    def update_secondaries(self) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update()
+
+    async def refresh_counts(self) -> None:
+        self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
+        self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
+        self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
+        for secondary in self.secondary_displays:
+            secondary.update_counts(self.day_count, self.week_count, self.spark_data)
+
+    def update_totals(self, cumulative: network.CumulativePacketStats) -> None:
+        util.schedule(self._update_totals(cumulative))
+
+    async def _update_totals(self, cumulative: network.CumulativePacketStats) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update_cumulative(self.cumulative_line, cumulative)

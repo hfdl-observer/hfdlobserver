@@ -171,7 +171,7 @@ class DeepChainMap(collections.ChainMap):
             first = next(values)
         except StopIteration:
             return self.__missing__(key)
-        if isinstance(first, collections.abc.MutableMapping):
+        if isinstance(first, collections.abc.MutableMapping) and not isinstance(first, DeepChainMap):
             return self.__class__(first, *values)
         return first
 

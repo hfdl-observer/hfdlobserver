@@ -292,7 +292,7 @@ def setup_logging(loghandler: Optional[logging.Handler], debug: bool = True, qui
 @click.option("--debug", help="Output debug/extra information.", is_flag=True)
 @click.option(
     "--node",
-    help="run as node only to connect with a remote Observer (implies headless)",
+    help="run as node only to connect with a remote Observer (implies --headless)",
     is_flag=True,
 )
 @click.option(
@@ -345,12 +345,13 @@ def command(
     try:
         headless = headless or node or not sys.stdout.isatty()
         if headless:
-            setup_logging(handler, debug, quiet)
-            observe(as_controller=not node)
+            import noui
+
+            noui.launch(handler, debug, quiet, is_node=node)
         else:
             import richui
 
-            richui.screen(handler, debug, quiet)
+            richui.launch(handler, debug, quiet)
     except Exception as exc:
         # will this catch the annoying libzmq assertion failures? nope.
         print(f"exiting due to exception: {exc}")

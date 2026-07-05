@@ -10,7 +10,7 @@ import logging
 import threading
 from typing import Any, Callable, Optional
 
-import pynng  # type: ignore[import-not-found]
+import pynng  # type: ignore[import-not-found, import-untyped]
 
 import hfdl_observer.util as util
 

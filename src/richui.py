@@ -65,7 +65,7 @@ FORECAST_STYLEMAP = {
 CellText = tuple[str | None, str | rich.style.Style | None]
 
 
-class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
+class ObserverDisplay(baseui.PrimaryDisplay):
     status: Optional[rich.table.Table] = None
     totals: Optional[rich.table.Table] = None
     counts: Optional[rich.table.Table] = None
@@ -75,9 +75,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
     uptime_text: rich.text.Text
     totals_text: rich.text.Text
     garbage: collections.deque[rich.table.Table]
-    day_count: int | None = None
-    week_count: int | None = None
-    spark_data: Sequence[int] | None = None
 
     def __init__(
         self,
@@ -87,13 +84,10 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         cumulative_line: baseui.CumulativeLine,
         forecaster: bus.RemoteURLRefresher,
     ) -> None:
+        baseui.PrimaryDisplay.__init__(self, heatmap, cumulative_line, forecaster)
         self.garbage = collections.deque()
         self.console = console
-        self.heatmap = heatmap
-        self.cumulative_line = cumulative_line
         self.root = rich.layout.Layout("HFDL Observer")
-        self.heatmap.display = self
-        self.cumulative_line.display = self
         self.uptime_text = rich.text.Text("STARTING")
         self.forecast = rich.text.Text("(space weather unavailable)")
         self.setup_status()
@@ -103,7 +97,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         self.update_tty_bar()
         self.keyboard = self.setup_keyboard(keyboard)
         self.secondary_displays = []
-        forecaster.watch_event("response", self.on_forecast)
 
     def update(self) -> None:
         t = rich.table.Table.grid(expand=True, pad_edge=False, padding=(0, 0))
@@ -160,9 +153,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         table.add_row(" 📰 Log", style=STYLES["PANE_BAR"])
         self.tty_bar = table
 
-    def update_totals(self, cumulative: network.CumulativePacketStats) -> None:
-        util.schedule(self._update_totals(cumulative))
-
     async def _update_totals(self, cumulative: network.CumulativePacketStats) -> None:
         await self.refresh_counts()
 
@@ -184,8 +174,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             texts[-1] += f" {util.sparkline(self.spark_data)}"
         self.totals_text.plain = f"{' ⎮ '.join(texts)} "
 
-        for secondary in self.secondary_displays:
-            secondary.update_cumulative(self.cumulative_line, cumulative)
+        await super()._update_totals(cumulative)
 
     def update_log(self, ring: collections.deque) -> None:
         # WARNING: do not use any logger from within this method.
@@ -217,13 +206,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
                 table.add_row(span)
         self.counts = table
 
-    async def refresh_counts(self) -> None:
-        self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
-        self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
-        self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
-        for secondary in self.secondary_displays:
-            secondary.update_counts(self.day_count, self.week_count, self.spark_data)
-
     def on_forecast(self, forecast: Any) -> None:
         try:
             recent = forecast["-1"]
@@ -251,8 +233,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         except Exception as err:
             logger.debug("ignoring forecaster error", exc_info=err)
 
-        for secondary in self.secondary_displays:
-            secondary.update_forecast(forecast)
+        super().on_forecast(forecast)
 
     @property
     def current_width(self) -> int:
@@ -418,7 +399,7 @@ def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
     return klass(config=config)
 
 
-def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
+def launch(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
     cui_settings = settings.cui
     console = rich.console.Console()
     console.clear()
@@ -494,4 +475,4 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
 
 
 if __name__ == "__main__":
-    screen(None)
+    launch(None)
