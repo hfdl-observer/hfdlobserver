@@ -416,7 +416,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
         util.schedule(self.add_packet(packet_info))
 
     async def add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> None:
-        packet = await util.in_db_thread(self._add_packet, packet_info)
+        await util.in_db_thread(self._add_packet, packet_info)
         # messaging.publish_soon(util.Message('firehose', 'packet', packet))
 
     def _add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> ReceivedPacket:

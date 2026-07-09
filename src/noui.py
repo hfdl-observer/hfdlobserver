@@ -6,14 +6,12 @@
 # flake8: noqa [W503]
 from __future__ import annotations
 
-import datetime
 import logging
 
-from typing import Any, Optional, Sequence
+from typing import Sequence
 
 import hfdl_observer.baseui as baseui
 import hfdl_observer.bus as bus
-import hfdl_observer.data as data
 import hfdl_observer.heatmapui as heatmapui
 import hfdl_observer.network as network
 import hfdl_observer.settings as settings
@@ -29,6 +27,10 @@ class NoDisplay(baseui.PrimaryDisplay):
     def update_heatmap(self, heatmap_data: Sequence) -> None:
         for secondary in self.secondary_displays:
             secondary.update()
+
+    async def _update_totals(self, cumulative: network.CumulativePacketStats) -> None:
+        await self.refresh_counts()
+        await super()._update_totals(cumulative)
 
 
 class HeatMap(heatmapui.HeatMap):
