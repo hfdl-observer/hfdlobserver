@@ -11,6 +11,7 @@ import datetime
 import functools
 import logging
 import random
+import socket
 import uuid
 from typing import Any, AsyncGenerator, Awaitable, MutableMapping, Optional
 
@@ -69,6 +70,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if message.target == self.target:
             payload: list[int] = message.payload
             util.schedule(self.listen(payload))
+            logger.debug(f"{self.target} told to listen")
         else:
             logger.info(f"{self.target} told to listen to {message.target}'s frequencies")
 
@@ -186,8 +188,8 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         self.logger.info(f"switching to {frequencies} from {self.frequencies}")
         await self.stop()
         self.frequencies = frequencies
-        self.channel = self.observing_channel_for(frequencies)
         if frequencies or self.always_listen:
+            self.channel = self.observing_channel_for(frequencies)
             self.logger.info(f"switched to {frequencies}")
             _state = None
             try:
@@ -484,30 +486,38 @@ class PullReceiver(LocalReceiver):
             self.frequencies = []
 
     async def _run(self) -> AsyncGenerator:
-        while self.running:
-            try:
-                yield process.CommandState("preparing")
-                self.logger.info("will connect")
-                await self.connect()
-                if self.reader and self.writer:
+        try:
+            yield process.CommandState("preparing")
+            while self.running:
+                try:
                     yield process.CommandState("running")
-                    await self.writer.drain()
-                    async for line in self.reader:
-                        decoded = line.decode()
-                        packet = hfdl.HFDLPacketInfo.from_raw(decoded)
-                        if packet:
-                            network.default_receiver_for_frequency(packet.frequency, self.name)
-                            self.notify_event("hfdl", packet)
-                    self.logger.info("end of file")
-                    await self.disconnect()
-            except asyncio.CancelledError:
-                self.logger.info("cancelled")
-                yield process.CommandState("cancelled")
-                break
-            except Exception as err:
-                self.logger.info("encountered an error", exc_info=err)
-                yield process.CommandState("error")
-                await asyncio.sleep(5)
+                    self.logger.info("will connect")
+                    await self.connect()
+                    if self.reader and self.writer:
+                        await self.writer.drain()
+                        async for line in self.reader:
+                            decoded = line.decode()
+                            packet = hfdl.HFDLPacketInfo.from_raw(decoded)
+                            if packet:
+                                network.default_receiver_for_frequency(packet.frequency, self.name)
+                                self.notify_event("hfdl", packet)
+                        self.logger.info("end of file")
+                        await self.disconnect()
+                except asyncio.CancelledError:
+                    self.logger.info("cancelled")
+                    yield process.CommandState("cancelled")
+                    break
+                except TimeoutError:
+                    self.logger.info("timeout")
+                    await asyncio.sleep(5)
+                    # retry by looping back
+                except Exception as err:
+                    self.logger.info("encountered an error", exc_info=err)
+                    yield process.CommandState("error")
+                    break
+        finally:
+            self.logger.debug("finally closing")
+            await self.stop()
         yield process.CommandState("done")
 
     async def stop(self) -> None:
@@ -520,11 +530,19 @@ class PullReceiver(LocalReceiver):
             self.logger.warning(f"{self.name} is already connected")
         else:
             self.reader, self.writer = await asyncio.open_connection(self.remote_host, self.remote_port)
+            # set additional options on socket to detect timeouts/disconnects.
+            # This is not really portable, and something of a linuxism/unixism.
+            sock = self.writer.get_extra_info('socket')
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 32)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 32)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
 
     async def disconnect(self) -> None:
         if self.writer:
             self.logger.info("will disconnect")
-            self.writer.close()
+            if not self.writer.is_closing():
+                self.writer.close()
             self.writer = None
             self.reader = None
 

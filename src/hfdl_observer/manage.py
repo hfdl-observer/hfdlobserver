@@ -278,6 +278,7 @@ class StaticOrchestrator(AbstractOrchestrator):
     def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
         self.validate_proxies()
         if not self.proxies:
+            logger.debug("will not orchestrate; no receiver proxies")
             return []
 
         actual_channels = []
@@ -289,7 +290,8 @@ class StaticOrchestrator(AbstractOrchestrator):
                 logger.info(f"no allocation for {proxy.name}")
             else:
                 allocated_names.add(proxy.name)
-                if proxy.channel is None or set(frequencies) != set(proxy.channel.frequencies):
+                logger.info(f'ORCHESTRATE PROXY {proxy} {proxy.channel}')
+                if not proxy.channel or set(frequencies) != set(proxy.channel.frequencies):
                     proxy.listen(frequencies)
                 if proxy.channel is not None:
                     actual_channels.append(proxy.channel)
@@ -629,6 +631,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     def orchestrate(self) -> None:
         if util.is_shutting_down():
             return
+        logger.debug(f"orchestrating node {self}")
         self.last_orchestrated = util.now()
         self.orchestration_task = None
         targetted_freqs = network.STATIONS.active()
@@ -705,6 +708,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
             pass
         else:
             if proxy.uuid == uuid:
+                logger.debug(f"deregistering proxy {proxy}")
                 self.conductor.remove_receiver(proxy)
                 del self.proxies[name]
             proxy.deregistered()

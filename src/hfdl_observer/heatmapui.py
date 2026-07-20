@@ -484,7 +484,8 @@ class HeatMap:
 
                 self.deferred_render_task = util.schedule(delayed_render())
         else:
-            logger.debug(f"render deferred. Next render time {next_render_time}")
+            pass
+            # too chatty logger.debug(f"render deferred. Next render time {next_render_time}")
 
     @functools.cached_property
     def reserved_width(self) -> int:
