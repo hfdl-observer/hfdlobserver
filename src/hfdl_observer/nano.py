@@ -1,6 +1,6 @@
 # hfdl_observer/nano.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -10,7 +10,7 @@ import logging
 import threading
 from typing import Any, Callable, Optional
 
-import pynng  # type: ignore[import-not-found]
+import pynng  # type: ignore[import-not-found, import-untyped]
 
 import hfdl_observer.util as util
 
@@ -47,6 +47,7 @@ class NanoSubscriber:
                     try:
                         data = await service.arecv()
                     except pynng.Timeout:
+                        # ignore timeouts.
                         pass
                     else:
                         if data:
@@ -95,7 +96,8 @@ class NanoPublisher:
                         message = await asyncio.wait_for(self.queue.get(), 1)
                         await service.asend(message.encode())
                     except pynng.Timeout:
-                        pass
+                        # no messages to publish, loop again to wait for more.
+                        continue
                     except QueueShutDown:
                         self.running = False
 
@@ -120,7 +122,7 @@ class NanoBroker:
     thread: Optional[threading.Thread] = None
     running: bool = False
 
-    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560) -> None:
+    def __init__(self, host: str = "*", pub_port: int = 5559, sub_port: int = 5560):
         # yes, reversed
         self.pub_url = f"tcp://{host}:{sub_port}"
         self.sub_url = f"tcp://{host}:{pub_port}"
@@ -133,6 +135,7 @@ class NanoBroker:
                     try:
                         xpub.send(xsub.recv())
                     except pynng.Timeout:
+                        # Timeout is expected; continue looping so we can periodically check self.running
                         pass
 
     def start(self, daemon: bool = True) -> None:

@@ -1,15 +1,19 @@
 # hfdl_observer/baseui.py
 # copyright 2026 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
+from __future__ import annotations
 
+import datetime
 import functools
 import logging
 
 from typing import Any, Optional, Sequence
 
 import hfdlobserver
+import hfdl_observer.bus as bus
+import hfdl_observer.data as data
 import hfdl_observer.heatmapui as heatmapui
 import hfdl_observer.network as network
 import hfdl_observer.util as util
@@ -17,9 +21,56 @@ import hfdl_observer.util as util
 logger = logging.getLogger(__name__)
 
 
+class CumulativeLine:
+    display: BaseObserverDisplay
+    target_observed: Optional[int] = None
+    bonus_observed: Optional[int] = None
+    active: Optional[int] = None
+    cumulative: network.CumulativePacketStats = network.CumulativePacketStats()
+
+    def register(self, observer: hfdlobserver.HFDLObserverController, totals: network.CumulativePacketStats) -> None:
+        self.cumulative = totals
+        totals.watch_event("update", self.on_update)
+        observer.watch_event("active", self.on_active)
+        observer.watch_event("observing", self.on_observing)
+
+    def on_update(self, _: Any) -> None:
+        if self.display:
+            self.display.update_totals(self.cumulative)
+
+    def on_observing(self, observed: tuple[Sequence[int], Sequence[int]]) -> None:
+        targetted, untargetted = observed
+        self.target_observed = len(targetted)
+        self.bonus_observed = len(untargetted)
+
+    def on_active(self, active_frequencies: Sequence[int]) -> None:
+        self.active = len(active_frequencies)
+
+
+class SecondaryObserverDisplay:
+    def update_heatmap(self, source: heatmapui.AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def update_cumulative(self, line: CumulativeLine, stats: network.CumulativePacketStats) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def update_forecast(self, forecast: dict) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def update_counts(self, day_count: None | int, week_count: None | int, spark_data: Sequence[int]) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def update(self) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    def register(self, observer: bus.EventNotifier) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+
 class BaseObserverDisplay:
     heatmap: heatmapui.HeatMap
     keyboard: util.Keyboard
+    secondary_displays: list[SecondaryObserverDisplay]
 
     def keyboard_help(self) -> str:
         parts = [
@@ -79,28 +130,55 @@ class BaseObserverDisplay:
     def update_totals(self, cumulative: network.CumulativePacketStats) -> None:
         raise NotImplementedError()
 
+    def add_secondary(self, secondary: SecondaryObserverDisplay) -> None:
+        if secondary not in self.secondary_displays:
+            self.secondary_displays.append(secondary)
 
-class CumulativeLine:
-    display: BaseObserverDisplay
-    target_observed: Optional[int] = None
-    bonus_observed: Optional[int] = None
-    active: Optional[int] = None
-    cumulative: network.CumulativePacketStats = network.CumulativePacketStats()
+    def remove_secondary(self, secondary: SecondaryObserverDisplay) -> None:
+        if secondary in self.secondary_displays:
+            self.secondary_displays.remove(secondary)
 
-    def register(self, observer: hfdlobserver.HFDLObserverController, totals: network.CumulativePacketStats) -> None:
-        self.cumulative = totals
-        totals.watch_event("update", self.on_update)
-        observer.watch_event("active", self.on_active)
-        observer.watch_event("observing", self.on_observing)
+    def will_render(self, source: heatmapui.AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update_heatmap(source, cells_visible, bin_str)
 
-    def on_update(self, _: Any) -> None:
-        if self.display:
-            self.display.update_totals(self.cumulative)
 
-    def on_observing(self, observed: tuple[Sequence[int], Sequence[int]]) -> None:
-        targetted, untargetted = observed
-        self.target_observed = len(targetted)
-        self.bonus_observed = len(untargetted)
+class PrimaryDisplay(BaseObserverDisplay, heatmapui.HeatMapConsumer):
+    day_count: int | None = None
+    week_count: int | None = None
+    spark_data: Sequence[int] | None = None
 
-    def on_active(self, active_frequencies: Sequence[int]) -> None:
-        self.active = len(active_frequencies)
+    def __init__(
+        self,
+        heatmap: heatmapui.HeatMap,
+        cumulative_line: CumulativeLine,
+        forecaster: bus.RemoteURLRefresher,
+    ) -> None:
+        self.heatmap = heatmap
+        self.cumulative_line = cumulative_line
+        self.heatmap.display = self
+        self.cumulative_line.display = self
+        self.secondary_displays = []
+        forecaster.watch_event("response", self.on_forecast)
+
+    def on_forecast(self, forecast: Any) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update_forecast(forecast)
+
+    def update_secondaries(self) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update()
+
+    async def refresh_counts(self) -> None:
+        self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
+        self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
+        self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
+        for secondary in self.secondary_displays:
+            secondary.update_counts(self.day_count, self.week_count, self.spark_data)
+
+    def update_totals(self, cumulative: network.CumulativePacketStats) -> None:
+        util.schedule(self._update_totals(cumulative))
+
+    async def _update_totals(self, cumulative: network.CumulativePacketStats) -> None:
+        for secondary in self.secondary_displays:
+            secondary.update_cumulative(self.cumulative_line, cumulative)

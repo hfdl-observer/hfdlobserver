@@ -1,6 +1,6 @@
 # hfdl_observer/hfdl.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 # flake8: noqa [W503]
@@ -10,6 +10,7 @@ import asyncio.subprocess
 import contextlib
 import dataclasses
 import errno
+import functools
 import os
 import re
 import shlex
@@ -51,6 +52,7 @@ class Command:
 
     def __init__(
         self,
+        *,
         parent_logger: logging.Logger,
         cmd: list[str],
         execution_arguments: dict = {},
@@ -59,7 +61,7 @@ class Command:
         recoverable_errors: Optional[list[str]] = None,
         unrecoverable_errors: Optional[list[str]] = None,
         valid_return_codes: Optional[list[int]] = None,
-    ) -> None:
+    ):
         if not cmd:
             raise ValueError("no command arguments specified")
         self.cmd = cmd
@@ -219,7 +221,9 @@ class Command:
                     process.send_signal(sig)
                     os.kill(pid, sig)
                 except ProcessLookupError:
-                    pass
+                    # The process has already exited between retrieving its PID and sending the signal.
+                    # This race is expected and can be safely ignored.
+                    logger.debug(f"process with pid {pid} does not exist; ignoring ProcessLookupError")
                 awaitables = [util.in_thread(process.wait, timeout)]
                 if execution_event is not None:
                     awaitables.append(asyncio.wait_for(execution_event.wait(), timeout=timeout))
@@ -316,16 +320,18 @@ class Command:
 
 
 class ProcessHarness:
-    logger: logging.Logger
     settle_time: float = 0
     backoff_time: float = 0
     command: Optional[Command] = None
-    previous_pids: list[int]
     starting_event: asyncio.Event
 
-    def __init__(self) -> None:
-        self.logger = logging.getLogger(str(self))
-        self.previous_pids = []
+    @functools.cached_property
+    def logger(self) -> logging.Logger:
+        return logging.getLogger(str(self))
+
+    @functools.cached_property
+    def previous_pids(self) -> list[int]:
+        return []
 
     def create_command(self) -> Command:
         raise NotImplementedError()

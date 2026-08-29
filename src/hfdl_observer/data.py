@@ -1,8 +1,10 @@
 # hfdl_observer/data.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
+from __future__ import annotations
+
 import collections
 import dataclasses
 import datetime
@@ -18,7 +20,7 @@ class ListenerConfig:
     address: str = "127.0.0.1"
     port: int = 5542
 
-    def __init__(self, data: dict | None = None) -> None:
+    def __init__(self, data: dict | None = None):
         if data is not None:
             self.proto = data["protocol"]
             self.address = data["address"]
@@ -139,6 +141,7 @@ class ReceivedPacket:
     longitude: Optional[float]
     receiver: str
     kind: Optional[str] = None
+    freq_active: Optional[bool] = None
 
 
 @dataclasses.dataclass
@@ -155,12 +158,17 @@ class FrequencyWatch:
 class BinGroup(list):
     annotations: set[int | str]
 
-    def __init__(self, num_bins: int) -> None:
+    def __init__(self, num_bins: int):
         self.annotations = set()
         super().__init__([0] * num_bins)
 
     def annotate(self, annotation: int | str) -> None:
         self.annotations.add(annotation)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, BinGroup):
+            return list.__eq__(self, other) and self.annotations == other.annotations
+        return list.__eq__(self, other)
 
 
 class AbstractPacketWatcher:
@@ -186,6 +194,9 @@ class AbstractPacketWatcher:
         raise NotImplementedError(str(self.__class__))
 
     async def daily_counts(self, limit: int) -> Sequence[int]:
+        raise NotImplementedError(str(self.__class__))
+
+    async def recent_packets(self, since: datetime.datetime) -> Sequence[ReceivedPacket]:
         raise NotImplementedError(str(self.__class__))
 
 

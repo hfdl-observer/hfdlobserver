@@ -1,6 +1,6 @@
 # hfdl_observer/heatmapui.py
 # copyright 2026 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -54,13 +54,6 @@ def bin_symbol(amount: int) -> str:
     if amount < 62:
         return chr(29 + amount)
     return "✽"
-
-
-class HeatMapConsumer:
-    current_width: int
-
-    def update_heatmap(self, heatmap_data: Sequence) -> None:
-        raise NotImplementedError()
 
 
 class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
@@ -136,6 +129,16 @@ class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
 
     def rows(self) -> Iterable[tuple[TableKeyT, Sequence[heat.Cell]]]:
         return list(row for row in self.source)
+
+
+class HeatMapConsumer:
+    current_width: int
+
+    def update_heatmap(self, heatmap_data: Sequence) -> None:
+        raise NotImplementedError()
+
+    def will_render(self, source: AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:
+        pass
 
 
 class HeatMapByFrequencyFormatter(AbstractHeatMapFormatter[heat.TableByFrequencyStation, tuple[int, int]]):
@@ -366,7 +369,7 @@ class HeatMap:
     renderer_available: asyncio.Event
     flexible_width: bool = False
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, *, config: dict):
         self.config = config
         mode = self.config.get("display_mode", "frequency")
         self.all_modes = {
@@ -481,7 +484,8 @@ class HeatMap:
 
                 self.deferred_render_task = util.schedule(delayed_render())
         else:
-            logger.debug(f"render deferred. Next render time {next_render_time}")
+            pass
+            # too chatty logger.debug(f"render deferred. Next render time {next_render_time}")
 
     @functools.cached_property
     def reserved_width(self) -> int:
@@ -522,6 +526,8 @@ class HeatMap:
         if not source.is_empty:
             self.last_render_time = util.now()
             cells_visible = source.cells_visible(body_width)
+
+            self.display.will_render(source, cells_visible, bin_str)
 
             header_rows = self.render_column_headers(source, cells_visible, bin_str)
             table.extend(header_rows)

@@ -1,6 +1,6 @@
 # hfdl_observer/util.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -11,6 +11,7 @@ import concurrent.futures
 import contextlib
 import dataclasses
 import datetime
+import functools
 import json
 import logging
 import math
@@ -132,20 +133,20 @@ class Pipe:
 
     def __init__(self) -> None:
         self.read, self.write = os.pipe()
-        # os.set_inheritable(self.read, True)
-        # os.set_inheritable(self.write, True)
 
     def close_read(self) -> None:
         try:
             os.close(self.read)
-        except OSError:
-            pass
+        except OSError as exc:
+            # Ignore errors when closing the read end; it may already be closed during teardown.
+            logger.debug("Ignoring OSError while closing Pipe.read: %s", exc)
 
     def close_write(self) -> None:
         try:
             os.close(self.write)
-        except OSError:
-            pass
+        except OSError as exc:
+            # Ignore errors when closing the read end; it may already be closed during teardown.
+            logger.debug("Ignoring OSError while closing Pipe.read: %s", exc)
 
     def close(self) -> None:
         self.close_write()
@@ -170,7 +171,7 @@ class DeepChainMap(collections.ChainMap):
             first = next(values)
         except StopIteration:
             return self.__missing__(key)
-        if isinstance(first, collections.abc.MutableMapping):
+        if isinstance(first, collections.abc.MutableMapping) and not isinstance(first, DeepChainMap):
             return self.__class__(first, *values)
         return first
 
@@ -213,7 +214,8 @@ async def cleanup_task(task: asyncio.Task) -> None:
     try:
         await task
     except asyncio.CancelledError:
-        pass
+        # Task cancellation during cleanup is expected; ignore it.
+        logger.debug("Task %r was cancelled during cleanup", task)
     except Exception as exc:
         logger.warning(f"{task} produced {exc} on cleanup")
 
@@ -221,7 +223,7 @@ async def cleanup_task(task: asyncio.Task) -> None:
 class async_reader(contextlib.AbstractAsyncContextManager):
     transport: asyncio.ReadTransport | None = None
 
-    def __init__(self, openable: IO[Any] | None, close_on_exit: bool = True) -> None:
+    def __init__(self, openable: IO[Any] | None, close_on_exit: bool = True):
         self.openable = openable
         self.close_on_exit = close_on_exit
 
@@ -296,10 +298,9 @@ async def async_keystrokes(pacing: float = 0) -> AsyncGenerator:
 
 
 class AbstractKeyboard:
-    mappings: dict[str, Callable]
-
-    def __init__(self) -> None:
-        self.mappings = {}
+    @functools.cached_property
+    def mappings(self) -> dict[str, Callable]:
+        return {}
 
     def add_mapping(self, key: str, callback: Callable) -> None:
         self.mappings[key] = callback
@@ -311,14 +312,14 @@ class AbstractKeyboard:
         try:
             callback = self.mappings[key]
         except KeyError:
+            # error on key stroke mapping. ignore the keystroke and wait for the next one.
             pass
         else:
             call_soon_threadsafe(callback, key)
 
 
 class AsyncKeyboard(AbstractKeyboard):
-    def __init__(self, pacing: float = 0) -> None:
-        super().__init__()
+    def __init__(self, pacing: float = 0):
         self.pacing = pacing
 
     async def run(self) -> None:
@@ -335,7 +336,7 @@ Keyboard = AsyncKeyboard
 
 class aclosing(contextlib.AbstractAsyncContextManager):
     # version of contextlib.aclosing that tries to relinquish running state of generator before closing it.
-    def __init__(self, thing: AsyncGenerator) -> None:
+    def __init__(self, thing: AsyncGenerator):
         self.thing = thing
 
     async def __aenter__(self) -> AsyncGenerator:
@@ -346,40 +347,46 @@ class aclosing(contextlib.AbstractAsyncContextManager):
         await self.thing.aclose()
 
 
+@functools.cache
+def thread_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=96)
+
+
+@functools.cache
+def ui_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=4)
+
+
+@functools.cache
+def db_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
+    return concurrent.futures.ThreadPoolExecutor(max_workers=5)
+
+
 async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "executor"):
-        thread_local.executor = concurrent.futures.ThreadPoolExecutor(max_workers=96)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(thread_executor(loop), run)
 
 
 async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "db_executor"):
-        thread_local.db_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.db_executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(db_executor(loop), run)
 
 
 async def in_ui_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
-    if not hasattr(thread_local, "ui_executor"):
-        thread_local.ui_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-    loop: asyncio.AbstractEventLoop = thread_local.loop
-
     def run() -> Any:
         return func(*args, **kwargs)
 
-    return await loop.run_in_executor(thread_local.ui_executor, run)
+    loop: asyncio.AbstractEventLoop = thread_local.loop
+    return await loop.run_in_executor(ui_executor(loop), run)
 
 
 def is_shutting_down() -> bool:
@@ -425,3 +432,33 @@ def sparkline(nums: Sequence[int]) -> str:
 def shutdown(*_: object, **__: object) -> None:
     shutdown_event.set()
     os.kill(os.getpid(), signal.SIGINT)
+
+
+def bearing(origin: tuple[float, float], destination: tuple[float, float]) -> float:
+    src_lat, src_lon = origin
+    dst_lat, dst_lon = destination
+    d_lon = math.radians(dst_lon - src_lon)
+    y = math.sin(d_lon) * math.cos(math.radians(dst_lat))
+    x = math.cos(math.radians(src_lat)) * math.sin(math.radians(dst_lat)) - math.sin(math.radians(src_lat)) * math.cos(
+        math.radians(dst_lat)
+    ) * math.cos(d_lon)
+    heading = math.atan2(y, x)
+    heading = math.degrees(heading)
+    heading = (heading + 360) % 360
+    return heading
+
+
+def distance(origin: tuple[float, float], destination: tuple[float, float]) -> float:
+    # haversine distance
+    lat1, lon1 = origin
+    lat2, lon2 = destination
+    radius = 6371  # km
+
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) * math.sin(dlat / 2)
+    a += math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) * math.sin(dlon / 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    d = radius * c
+
+    return d

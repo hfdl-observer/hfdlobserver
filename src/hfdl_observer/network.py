@@ -1,6 +1,6 @@
 # hfdl_observer/network.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -10,7 +10,7 @@ import datetime
 import functools
 import logging
 from enum import Enum
-from typing import Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union
 
 import hfdl_observer.bus as bus
 import hfdl_observer.hfdl as hfdl
@@ -116,10 +116,6 @@ class StationAvailability:
 
 # protocol, really.
 class AbstractNetworkUpdater(bus.EventNotifier):
-    def __init__(self) -> None:
-        super().__init__()
-        self._active_ts = functools.lru_cache(maxsize=128)(self._active_ts)  # type: ignore[method-assign]
-
     async def current(self) -> Sequence[StationAvailability]:
         raise NotImplementedError()
 
@@ -133,8 +129,12 @@ class AbstractNetworkUpdater(bus.EventNotifier):
     # and can be reawaited... and therefore cached. There are some corner cases but none of those should appear here.
     # method is wrapped in cacher during init, though there's not really an issue with this object not getting GC'd.
     # @functools.lru_cache(maxsize=128)
-    def _active_ts(self, timestamp: int) -> asyncio.Task[Sequence[StationAvailability]]:
-        return util.schedule(self.active(util.timestamp_to_datetime(timestamp)))
+    @functools.cached_property
+    def _active_ts(self) -> Callable[[int], asyncio.Task[Sequence[StationAvailability]]]:
+        def actual_active_ts(timestamp: int) -> asyncio.Task[Sequence[StationAvailability]]:
+            return util.schedule(self.active(util.timestamp_to_datetime(timestamp)))
+
+        return functools.lru_cache(maxsize=128)(actual_active_ts)
 
     async def active_for_frame(self, at: Optional[datetime.datetime] = None) -> Sequence[StationAvailability]:
         # current/now/None should never be cached.
@@ -312,40 +312,48 @@ class CumulativePacketStats(bus.EventNotifier):
             self.no_position += 1
         self.notify_event("update", self)
 
+    def as_dict(self) -> dict:
+        return {
+            "packets": self.packets,
+            "from_air": self.from_air,
+            "from_ground": self.from_ground,
+            "with_position": self.with_position,
+            "no_position": self.no_position,
+            "squitters": self.squitters,
+        }
+
 
 class StationLookup:
     by_id: dict[int, Station]
     by_freq: dict[int, Station]
 
-    def __init__(self, initial: Optional[dict[int, Station]] = None) -> None:
-        if initial:
-            self.update(initial)
+    def __init__(self, *, initial: Optional[dict[int, Station]] = None):
+        self.by_id = {}
+        self.by_freq = {}
+        self.update(initial or {})
 
     def update(self, systable: dict[int, Station]) -> None:
-        if hasattr(self, "by_id"):
-            for sid, station in systable.items():
-                current = self.by_id.setdefault(sid, station)
-                current.update(station)
-        else:
-            self.by_id = systable
-        self.refresh()
+        for sid, station in systable.items():
+            current = self.by_id.setdefault(sid, station)
+            current.update(station)
+        if self.by_id:
+            self.refresh()
 
     def update_active(self, availabilities: Sequence[StationAvailability]) -> None:
-        if hasattr(self, "by_id"):
+        if self.by_id:
             for availability in availabilities:
                 self[availability.station_id].update_active(availability.frequencies)
             self.refresh()
 
     def add_observed(self, sid: int, frequency: int) -> None:
-        try:
+        if self.by_id:
             station = self.by_id[sid]
-        except AttributeError:
-            logger.info(f'StationLookup not fully initialised. Dropping {sid}/{frequency}.')
-        else:
             station.observed_frequencies = station.observed_frequencies or set()
             if frequency not in station.observed_frequencies:
                 station.observed_frequencies.add(frequency)
                 self.refresh()
+        else:
+            logger.info(f"StationLookup not fully initialised. Dropping {sid}/{frequency}.")
 
     def refresh(self) -> None:
         self.by_freq = {}
@@ -402,3 +410,7 @@ def receiver_for(frequency: int) -> str:
 
 def set_receiver_for_frequency(frequency: int, receiver: str) -> None:
     RECEIVER_FREQUENCIES[frequency] = receiver
+
+
+def default_receiver_for_frequency(frequency: int, receiver: str) -> None:
+    RECEIVER_FREQUENCIES.setdefault(frequency, receiver)

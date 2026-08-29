@@ -1,17 +1,16 @@
 # richui.py
 # copyright 2026 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 # flake8: noqa [W503]
 
-import asyncio
 import collections
 import functools
 import datetime
 import logging
 
-from typing import Any, Generic, Callable, Coroutine, Iterable, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Optional, Sequence
 
 import rich.console
 import rich.highlighter
@@ -27,15 +26,13 @@ import rich.text
 import hfdl_observer.baseui as baseui
 import hfdl_observer.bus as bus
 import hfdl_observer.data as data
-import hfdl_observer.heat as heat
 import hfdl_observer.heatmapui as heatmapui
-import hfdl_observer.hfdl as hfdl
-import hfdl_observer.manage as manage
 import hfdl_observer.network as network
 import hfdl_observer.settings as settings
 import hfdl_observer.util as util
 
 import hfdlobserver
+import webui
 
 logger = logging.getLogger(__name__)
 start = datetime.datetime.now()
@@ -68,7 +65,7 @@ FORECAST_STYLEMAP = {
 CellText = tuple[str | None, str | rich.style.Style | None]
 
 
-class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
+class ObserverDisplay(baseui.PrimaryDisplay):
     status: Optional[rich.table.Table] = None
     totals: Optional[rich.table.Table] = None
     counts: Optional[rich.table.Table] = None
@@ -78,9 +75,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
     uptime_text: rich.text.Text
     totals_text: rich.text.Text
     garbage: collections.deque[rich.table.Table]
-    day_count: int | None = None
-    week_count: int | None = None
-    spark_data: Sequence[int] | None = None
 
     def __init__(
         self,
@@ -90,13 +84,10 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         cumulative_line: baseui.CumulativeLine,
         forecaster: bus.RemoteURLRefresher,
     ) -> None:
+        baseui.PrimaryDisplay.__init__(self, heatmap, cumulative_line, forecaster)
         self.garbage = collections.deque()
         self.console = console
-        self.heatmap = heatmap
-        self.cumulative_line = cumulative_line
         self.root = rich.layout.Layout("HFDL Observer")
-        self.heatmap.display = self
-        self.cumulative_line.display = self
         self.uptime_text = rich.text.Text("STARTING")
         self.forecast = rich.text.Text("(space weather unavailable)")
         self.setup_status()
@@ -105,7 +96,7 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         self.update_status()
         self.update_tty_bar()
         self.keyboard = self.setup_keyboard(keyboard)
-        forecaster.watch_event("response", self.on_forecast)
+        self.secondary_displays = []
 
     def update(self) -> None:
         t = rich.table.Table.grid(expand=True, pad_edge=False, padding=(0, 0))
@@ -162,9 +153,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         table.add_row(" 📰 Log", style=STYLES["PANE_BAR"])
         self.tty_bar = table
 
-    def update_totals(self, cumulative: network.CumulativePacketStats) -> None:
-        util.schedule(self._update_totals(cumulative))
-
     async def _update_totals(self, cumulative: network.CumulativePacketStats) -> None:
         await self.refresh_counts()
 
@@ -185,6 +173,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
         if self.spark_data:
             texts[-1] += f" {util.sparkline(self.spark_data)}"
         self.totals_text.plain = f"{' ⎮ '.join(texts)} "
+
+        await super()._update_totals(cumulative)
 
     def update_log(self, ring: collections.deque) -> None:
         # WARNING: do not use any logger from within this method.
@@ -216,11 +206,6 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
                 table.add_row(span)
         self.counts = table
 
-    async def refresh_counts(self) -> None:
-        self.day_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=1))
-        self.week_count = await data.PACKET_WATCHER.count_packets_since(datetime.timedelta(days=7))
-        self.spark_data = await data.PACKET_WATCHER.daily_counts(7)
-
     def on_forecast(self, forecast: Any) -> None:
         try:
             recent = forecast["-1"]
@@ -247,6 +232,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             (text.append(f"G{forecast1d['G']['Scale'] or '-'}", FORECAST_STYLEMAP[forecast1d["G"]["Text"]]),)
         except Exception as err:
             logger.debug("ignoring forecaster error", exc_info=err)
+
+        super().on_forecast(forecast)
 
     @property
     def current_width(self) -> int:
@@ -276,6 +263,8 @@ class ObserverDisplay(baseui.BaseObserverDisplay, heatmapui.HeatMapConsumer):
             except IndexError:
                 break
             self.clear_table(garbage)
+        for secondary in self.secondary_displays:
+            secondary.update()
 
 
 @functools.cache
@@ -284,8 +273,10 @@ def map_style(style: str) -> rich.style.Style | None:
         return None
     if style.startswith("rgb("):
         rgb = tuple(int(x) for x in style[4:-1].split(","))
-        return rich.style.Style(bgcolor=f"rgb({','.join(str(i) for i in rgb)})", color="black")
-    return STYLES[style]
+        s = rich.style.Style(bgcolor=f"rgb({','.join(str(i) for i in rgb)})", color="black")
+    else:
+        s = STYLES[style]
+    return s
 
 
 def transition(
@@ -301,24 +292,16 @@ def transition(
 
 class HeatMap(heatmapui.HeatMap):
     def celltexts_to_text(self, texts: list[heatmapui.CellText], style: Optional[rich.style.Style] = None) -> Sequence:
-        elements: list[tuple[str, rich.style.Style | None]] = []
+        elements: list[tuple[str, str | None]] = []
         for celltext in texts:
             text, textstyle = (celltext[0] if celltext[0] else "   ", celltext[1])
             if elements and elements[-1][1] == textstyle:  # if the styles are the same, they can be merged.
-                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
-                #     text = text[1:]
-                elements[-1] = (elements[-1][0] + text, map_style(textstyle))
+                elements[-1] = (elements[-1][0] + text, textstyle)
             else:
-                # aborted attempt to use half blocks for greater data density. It doesn't help readability, and has
-                # additional layout quirks.
-                # if self.flexible_width and elements and elements[-1][0].endswith(" ") and text.startswith(" "):
-                #     text = text[1:]
-                #     elements[-1] = (elements[-1][0][:-1], elements[-1][1])
-                #     elements.append(transition(elements[-1][1], map_style(textstyle)))
-                elements.append((text, map_style(textstyle)))
+                elements.append((text, textstyle))
         result = rich.text.Text(style=style or "")
         for element in elements:
-            result.append(*element)
+            result.append(element[0], map_style(element[1]))
         return [result]
 
     def render_column_headers(
@@ -357,6 +340,9 @@ class HeatMap(heatmapui.HeatMap):
         if not any_rows:
             rows.append((" Awaiting data...", "NORMAL_TEXT"))
         return rows
+
+    def render_empty_map(self, head: str, width: int) -> Sequence:
+        return ["no data"]
 
 
 class ConsoleRedirector(rich.console.Console):
@@ -403,7 +389,17 @@ def exit(*_: Any) -> None:
     util.shutdown_event.set()
 
 
-def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
+def create_secondary(config: dict) -> baseui.SecondaryObserverDisplay | None:
+    SECONDARY_TYPES = {
+        "web": webui.ObserverDisplay,
+    }
+    if not (klass := SECONDARY_TYPES.get(config["type"])):
+        logger.warning(f"{config['type']} is not a valid Secondary Display; ignoring.")
+        return None
+    return klass(config=config)
+
+
+def launch(loghandler: Optional[logging.Handler], debug: bool = True, quiet: bool = False) -> None:
     cui_settings = settings.cui
     console = rich.console.Console()
     console.clear()
@@ -414,13 +410,16 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         highlighter=rich.highlighter.NullHighlighter(),
         enable_link_path=False,
     )
-    heatmap = HeatMap(cui_settings["ticker"])
+    heatmap = HeatMap(config=cui_settings["ticker"])
     cumulative_line = baseui.CumulativeLine()
     keyboard = util.Keyboard(1.0)
 
-    forecaster = bus.RemoteURLRefresher("https://services.swpc.noaa.gov/products/noaa-scales.json", 617)
+    forecaster = bus.RemoteURLRefresher(url="https://services.swpc.noaa.gov/products/noaa-scales.json", period=617)
 
     display = ObserverDisplay(console, heatmap, keyboard, cumulative_line, forecaster)
+    for entry in cui_settings.get("secondary_displays", []):
+        if secondary := create_secondary(entry):
+            display.add_secondary(secondary)
 
     # setup logging
     logging_console.output = display.update_log
@@ -435,7 +434,9 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         handlers=handlers,
         force=True,
     )
-    display_updater = bus.PeriodicCallback(1.0 / SCREEN_REFRESH_RATE, [display.update_status, display.update], False)
+    display_updater = bus.PeriodicCallback(
+        period=1.0 / SCREEN_REFRESH_RATE, callbacks=[display.update_status, display.update], chatty=False
+    )
 
     def observing(
         observer: hfdlobserver.HFDLObserverController,
@@ -446,6 +447,8 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         util.schedule(forecaster.run())
         util.schedule(display_updater.run())
         util.schedule(keyboard.run())
+        for secondary in display.secondary_displays:
+            secondary.register(observer)
         keyboard.add_mapping("r", lambda _: observer.maybe_describe_receivers(force=True))
         keyboard.add_mapping("R", lambda _: observer.maybe_describe_receivers(force=True))
 
@@ -472,4 +475,4 @@ def screen(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
 
 
 if __name__ == "__main__":
-    screen(None)
+    launch(None)

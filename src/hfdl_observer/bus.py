@@ -1,11 +1,12 @@
 # hfdl_observer/bus.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
 import asyncio
 import collections
+import functools
 import json
 import logging
 import pathlib
@@ -19,10 +20,9 @@ logger = logging.getLogger(__name__)
 
 
 class EventNotifier:
-    _watchers: dict[str, list[Callable]]
-
-    def __init__(self) -> None:
-        self._watchers = {}
+    @functools.cached_property
+    def _watchers(self) -> dict[str, list[Callable]]:
+        return {}
 
     def watch_event(self, subject: str, callback: Callable) -> None:
         if self._watchers is None:
@@ -67,8 +67,7 @@ class RoutineTask(EventNotifier):
 class PeriodicTask:
     chatty: bool = True
 
-    def __init__(self, period: float):
-        super().__init__()
+    def __init__(self, *, period: float):
         self.period = period
         self.enabled = False
 
@@ -105,8 +104,8 @@ class PeriodicTask:
 
 
 class PeriodicCallback(PeriodicTask):
-    def __init__(self, period: float, callbacks: list[Callable], chatty: bool = True) -> None:
-        super().__init__(period)
+    def __init__(self, *, period: float, callbacks: list[Callable], chatty: bool = True):
+        PeriodicTask.__init__(self, period=period)
         self.chatty = chatty
         self.callbacks = callbacks or []
 
@@ -123,9 +122,8 @@ class PeriodicCallback(PeriodicTask):
 
 
 class RemoteURLRefresher(PeriodicTask, EventNotifier):
-    def __init__(self, url: str, period: int = 60):
+    def __init__(self, *, url: str, period: int = 60):
         PeriodicTask.__init__(self, period=period)
-        EventNotifier.__init__(self)
         self.url = url
 
     async def execute(self) -> None:
@@ -148,9 +146,8 @@ class RemoteURLRefresher(PeriodicTask, EventNotifier):
 
 
 class FileRefresher(PeriodicTask, EventNotifier):
-    def __init__(self, path: Union[pathlib.Path, str], period: int = 60):
-        PeriodicTask.__init__(self, period)
-        EventNotifier.__init__(self)
+    def __init__(self, *, path: Union[pathlib.Path, str], period: int = 60):
+        PeriodicTask.__init__(self, period=period)
         self.path = pathlib.Path(path)
 
     async def execute(self) -> None:
@@ -166,9 +163,8 @@ class FileRefresher(PeriodicTask, EventNotifier):
 
 
 class JSONFileRefresher(FileRefresher, JSONWatcher):
-    def __init__(self, path: Union[pathlib.Path, str], period: int = 60):
-        JSONWatcher.__init__(self)
-        FileRefresher.__init__(self, path, period)
+    def __init__(self, *, path: Union[pathlib.Path, str], period: int = 60):
+        FileRefresher.__init__(self, path=path, period=period)
         self.watch_event("text", self.jsonify)
 
     def __str__(self) -> str:
@@ -178,9 +174,7 @@ class JSONFileRefresher(FileRefresher, JSONWatcher):
 class StreamWatcher(RoutineTask, EventNotifier):
     debug_logger: Optional[logging.Logger]
 
-    def __init__(self, stream: AsyncGenerator, debug_logger: Optional[logging.Logger] = None):
-        RoutineTask.__init__(self)
-        EventNotifier.__init__(self)
+    def __init__(self, *, stream: AsyncGenerator, debug_logger: Optional[logging.Logger] = None):
         self.stream = stream
         self.debug_logger = debug_logger
 
@@ -199,7 +193,6 @@ class StreamWatcher(RoutineTask, EventNotifier):
 
 
 class JSONStreamWatcher(StreamWatcher, JSONWatcher):
-    def __init__(self, stream: AsyncGenerator):
-        JSONWatcher.__init__(self)
-        StreamWatcher.__init__(self, stream)
+    def __init__(self, *, stream: AsyncGenerator):
+        StreamWatcher.__init__(self, stream=stream)
         self.watch_event("line", self.jsonify)

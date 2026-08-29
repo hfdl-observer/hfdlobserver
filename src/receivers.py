@@ -1,6 +1,6 @@
 # receivers.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -11,13 +11,16 @@ import datetime
 import functools
 import logging
 import random
+import socket
 import uuid
 from typing import Any, AsyncGenerator, Awaitable, MutableMapping, Optional
 
 import decoders
 import hfdl_observer.bus as bus
 import hfdl_observer.data as data
+import hfdl_observer.hfdl as hfdl
 import hfdl_observer.messaging as messaging
+import hfdl_observer.network as network
 import hfdl_observer.process as process
 import hfdl_observer.util as util
 import iqsources
@@ -36,8 +39,9 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
     conductor: Optional[str] = None
     last_seen: datetime.datetime
     registered: bool = False
+    always_listen: bool = False
 
-    def __init__(self, name: str, config: collections.abc.MutableMapping) -> None:
+    def __init__(self, *, name: str, config: collections.abc.MutableMapping):
         self.uuid = str(uuid.uuid4())
         self.config = config
         self.name = name
@@ -47,8 +51,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         messaging.subscribe(self, self.target)
         messaging.subscribe(self, "/", "available")
         messaging.subscribe(self, "/", "unavailable")
-        self.watchdog = bus.PeriodicCallback(60, [self.heartbeat], chatty=False)
-        super().__init__()
+        self.watchdog = bus.PeriodicCallback(period=60, callbacks=[self.heartbeat], chatty=False)
 
     def payload(self, **data: Any) -> dict:
         _payload = {
@@ -67,6 +70,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if message.target == self.target:
             payload: list[int] = message.payload
             util.schedule(self.listen(payload))
+            logger.debug(f"{self.target} told to listen")
         else:
             logger.info(f"{self.target} told to listen to {message.target}'s frequencies")
 
@@ -81,6 +85,9 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         uuid: str = message.payload
         if uuid == self.uuid:
             self.deregistered()
+
+    def on_remote_reregister(self, message: messaging.Message) -> None:
+        self.register()
 
     def on_remote_ping(self, message: messaging.Message) -> None:
         if isinstance(message.payload, str):
@@ -136,6 +143,8 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
             messaging.publish_soon(messaging.Message(self.conductor, "deregister", self.payload()))
             task = util.schedule(self.stop())
             task.add_done_callback(self.deregistered)
+        else:
+            self.deregistered()
 
     def deregistered(self, _: Any = None) -> None:
         self.registered = False
@@ -179,8 +188,8 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         self.logger.info(f"switching to {frequencies} from {self.frequencies}")
         await self.stop()
         self.frequencies = frequencies
-        self.channel = self.observing_channel_for(frequencies)
-        if frequencies:
+        if frequencies or self.always_listen:
+            self.channel = self.observing_channel_for(frequencies)
             self.logger.info(f"switched to {frequencies}")
             _state = None
             try:
@@ -231,9 +240,6 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
 class Web888Receiver(LocalReceiver):
     shell: bool = False
 
-    def __init__(self, name: str, config: collections.abc.MutableMapping) -> None:
-        super().__init__(name, config)
-
     def observable_widths(self) -> list[int]:
         return [int(self.config.get("channel_width", 12000))]
 
@@ -244,9 +250,11 @@ class DummyReceiver(Web888Receiver):
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.DummyClient(self.name, self.config.get("client", {}))
+            self.client = iqsources.DummyClient(name=self.name, config=self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.DummyDecoder(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.DummyDecoder(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
 
     async def run(self) -> AsyncGenerator:
         self.publish_listening()
@@ -264,7 +272,9 @@ class Web888ExecReceiver(Web888Receiver):
                 self.name, self.config.get("client", {}), int(self.config.get("channel_width", 12000))
             )
         if not self.decoder:
-            self.decoder = decoders.IQDecoderProcess(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.IQDecoderProcess(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
 
     def is_running(self) -> bool:
         return (self.client is not None and self.client.is_running()) or (
@@ -360,8 +370,7 @@ class Web888ExecReceiver(Web888Receiver):
 class ReceiverPipe(process.ProcessHarness):
     cmd: list[str]
 
-    def __init__(self, cmd: list[str]) -> None:
-        super().__init__()
+    def __init__(self, *, cmd: list[str]):
         self.shell = True
         self.cmd = cmd
 
@@ -378,9 +387,11 @@ class Web888PipeReceiver(Web888Receiver):
         if not self.client:
             self.client = iqsources.KiwiClient(self.name, self.config.get("client", {}))
         if not self.decoder:
-            self.decoder = decoders.IQDecoder(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoders.IQDecoder(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
         if not self.receiver_pipe:
-            self.receiver_pipe = ReceiverPipe(self.client.commandline() + ["|"] + self.decoder.commandline())
+            self.receiver_pipe = ReceiverPipe(cmd=self.client.commandline() + ["|"] + self.decoder.commandline())
 
     async def run(self) -> AsyncGenerator:
         if self.receiver_pipe is not None:
@@ -403,7 +414,7 @@ class DirectReceiver(LocalReceiver):
         if not self.decoder:
             decoder_type = self.config["decoder"]["type"]
             decoder_class = getattr(decoders, decoder_type)
-            self.decoder = decoder_class(self.name, self.config.get("decoder", {}), self.listener)
+            self.decoder = decoder_class(name=self.name, config=self.config.get("decoder", {}), listener=self.listener)
             if not isinstance(self.decoder, decoders.DirectDecoder):
                 raise ValueError(f"{self.decoder} is not an expected Decoder")
             self.observable_channel_widths = self.decoder.observable_channel_widths()
@@ -449,10 +460,117 @@ class DirectReceiver(LocalReceiver):
         return []
 
 
+class PullReceiver(LocalReceiver):
+    remote_host: str
+    remote_port: int
+    reader: asyncio.StreamReader | None = None
+    writer: asyncio.StreamWriter | None = None
+    always_listen: bool = True
+    running: bool = False
+
+    def setup_harnesses(self) -> None:
+        self.remote_host = self.config["remote_host"]
+        self.remote_port = int(self.config["remote_port"])
+
+    def is_running(self) -> bool:
+        return self.reader is not None or self.writer is not None
+
+    async def run(self) -> AsyncGenerator:
+        self.running = True
+        self.publish_listening()
+        try:
+            async for thing in self._run():
+                yield thing
+        finally:
+            self.running = False
+            self.frequencies = []
+
+    async def _run(self) -> AsyncGenerator:
+        try:
+            yield process.CommandState("preparing")
+            while self.running:
+                try:
+                    yield process.CommandState("running")
+                    self.logger.info("will connect")
+                    await self.connect()
+                    if self.reader and self.writer:
+                        await self.writer.drain()
+                        async for line in self.reader:
+                            decoded = line.decode()
+                            packet = hfdl.HFDLPacketInfo.from_raw(decoded)
+                            if packet:
+                                network.default_receiver_for_frequency(packet.frequency, self.name)
+                                self.notify_event("hfdl", packet)
+                        self.logger.info("end of file")
+                        await self.disconnect()
+                except asyncio.CancelledError:
+                    self.logger.info("cancelled")
+                    yield process.CommandState("cancelled")
+                    break
+                except TimeoutError:
+                    self.logger.info("timeout")
+                    await asyncio.sleep(5)
+                    # retry by looping back
+                except Exception as err:
+                    self.logger.info("encountered an error", exc_info=err)
+                    yield process.CommandState("error")
+                    break
+        finally:
+            self.logger.debug("finally closing")
+            await self.stop()
+        yield process.CommandState("done")
+
+    async def stop(self) -> None:
+        self.running = False
+        self.logger.info(f"Stopping {self}")
+        await self.disconnect()
+
+    async def connect(self) -> None:
+        if self.writer:
+            self.logger.warning(f"{self.name} is already connected")
+        else:
+            self.reader, self.writer = await asyncio.open_connection(self.remote_host, self.remote_port)
+            # set additional options on socket to detect timeouts/disconnects.
+            # This is not really portable, and something of a linuxism/unixism.
+            sock = self.writer.get_extra_info('socket')
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 32)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 32)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 5)
+
+    async def disconnect(self) -> None:
+        if self.writer:
+            self.logger.info("will disconnect")
+            if not self.writer.is_closing():
+                self.writer.close()
+            self.writer = None
+            self.reader = None
+
+    def observable_widths(self) -> list[int]:
+        return [0]
+
+    def clear(self) -> None:
+        if not self.is_running():
+            self.logger.debug(f"{self.name} has no connection, clearing.")
+            if self.reader:
+                self.reader = None
+            if self.writer:
+                self.writer = None
+            super().clear()
+        else:
+            self.logger.debug(f"{self.name} still has a valid connection, not clearing")
+
+    def describe_components(self) -> list[str]:
+        return [f"{self.name} @ tcp:{self.remote_host}:{self.remote_port}"]
+
+    def observing_channel_for(self, frequencies: list[int]) -> data.ObservingChannel:
+        return data.ObservingChannel(0, frequencies)
+
+
 class ReceiverNode:
     local_receivers: list[LocalReceiver]
 
-    def __init__(self, config: collections.abc.Mapping) -> None:
+    def __init__(self, *, config: collections.abc.Mapping):
         self.config = config
         self.local_receivers = []
 
@@ -460,10 +578,11 @@ class ReceiverNode:
         try:
             typename = receiver_config["type"]
             klass = globals()[typename]
-            receiver: LocalReceiver = klass(receiver_config["name"], receiver_config)
+            receiver: LocalReceiver = klass(name=receiver_config["name"], config=receiver_config)
         except KeyError:
             raise ValueError(f"Config for receiver `{receiver_config.get('receiver', '(unknown)')}` is malformed")
         receiver.watch_event("fatal", self.on_fatal_error)
+        receiver.watch_event("hfdl", self.on_local_hfdl_packet)
         self.local_receivers.append(receiver)
         return receiver
 
@@ -481,4 +600,7 @@ class ReceiverNode:
         await asyncio.gather(*self.outstanding_awaitables(), return_exceptions=True)
 
     def on_fatal_error(self, _: Any) -> None:
+        pass
+
+    def on_local_hfdl_packet(self, packet: hfdl.HFDLPacketInfo) -> None:
         pass

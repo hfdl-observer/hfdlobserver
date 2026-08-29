@@ -1,6 +1,6 @@
 # hfdl_observer/manage.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -35,8 +35,7 @@ class NetworkOverview(bus.EventNotifier):
     startables: list[Callable[[], Coroutine[Any, Any, None]]]
     tasks: list[asyncio.Task]
 
-    def __init__(self, config: dict, updater: network.AbstractNetworkUpdater):
-        super().__init__()
+    def __init__(self, *, config: dict, updater: network.AbstractNetworkUpdater):
         self.last_state = {}
         self.config = config
         self.updater = updater
@@ -44,7 +43,7 @@ class NetworkOverview(bus.EventNotifier):
         self.tasks = []
         self.startables = []
         for file_source in [hfdl_observer.env.as_path(p) for p in config.get("station_files", [])]:
-            file_watcher = bus.FileRefresher(file_source, period=3600)
+            file_watcher = bus.FileRefresher(path=file_source, period=3600)
             if not file_source.exists():
                 raise ValueError(f"{file_source} does not exist")
             # prime this pump... shouldn't be necessary, but.
@@ -55,14 +54,14 @@ class NetworkOverview(bus.EventNotifier):
             try:
                 previous = json.loads(self.save_path.read_text())
             except (json.JSONDecodeError, IOError):
-                pass
+                logging.warning("ignoring state file load; starting with new file.")
             else:
                 logger.debug("loading previous state")
                 updater.on_community(previous)
         for ix, url_source in enumerate(config.get("station_updates", [])):
             if not isinstance(url_source, dict):
                 url_source = {"url": url_source}
-            url_watcher = bus.RemoteURLRefresher(url_source["url"], period=url_source.get("period", 60 + ix))
+            url_watcher = bus.RemoteURLRefresher(url=url_source["url"], period=url_source.get("period", 60 + ix))
             url_watcher.watch_event("response", updater.on_community)
             self.startables.append(url_watcher.run)
         self.will_save = False
@@ -128,12 +127,8 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
     weight: int = data.DEFAULT_RECEIVER_WEIGHT
 
     def __init__(
-        self,
-        name: str,
-        uuid: str,
-        observable_widths: list[int],
-        weight: int = data.DEFAULT_RECEIVER_WEIGHT,
-    ) -> None:
+        self, *, name: str, uuid: str, observable_widths: list[int], weight: int = data.DEFAULT_RECEIVER_WEIGHT
+    ):
         self.name = name
         self.uuid = uuid
         self.weight = weight
@@ -158,7 +153,7 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
 
     def on_remote_listening(self, message: messaging.Message) -> None:
         payload: dict = message.payload
-        frequencies: list[int] = payload["frequencies"]
+        frequencies: list[int] = payload.get("frequencies") or []
         if self.uuid == payload["uuid"]:
             logger.info(f"{self} (remote) now listening to {len(frequencies)} frequencies")
             self.keepalive()
@@ -166,12 +161,15 @@ class ReceiverProxy(data.ChannelObserver, messaging.GenericSubscriber):
             for frequency in frequencies or []:
                 network.set_receiver_for_frequency(frequency, self.name)
         else:
-            logger.info(
-                f"{self} bad notification. ({payload['uuid']}) {len(frequencies)} frequencies #{self.pings_sent}"
-            )
-            del payload["frequencies"]
-            messaging.publish_soon(messaging.Message(self.target, "deregister", payload))
             self.pings_sent += 1  # penalize me.
+            logger.info(
+                f"{self} unexpected notification. ({payload['uuid']}) {len(frequencies)} frequencies #{self.pings_sent}"
+            )
+            try:
+                del payload["frequencies"]
+            except KeyError:
+                logger.warning(f"receiver message without frequencies {message}")
+            messaging.publish_soon(messaging.Message(self.target, "reregister", payload))
 
     def on_remote_pong(self, message: messaging.Message) -> None:
         if self.uuid == message.payload.get("src"):
@@ -219,10 +217,11 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
     proxies: list[ReceiverProxy]
     last_listening_logged: None | tuple[int, int, int] = None
 
-    def __init__(self, config: dict) -> None:
-        super().__init__()
+    def __init__(self, *, config: dict):
         self.config = config
-        self.ranked_station_ids = config["ranked_stations"]
+        self.ranked_station_ids = config.get("ranked_stations", [])
+        if not self.ranked_station_ids:
+            logger.warning("No ranked stations configured.")
         ignores = config.get("ignored_frequencies", [])
         self.ignored_frequencies = util.normalize_ranges(ignores)
         self.proxies = []
@@ -270,8 +269,8 @@ class AbstractOrchestrator(bus.EventNotifier, data.ChannelObserver):
 
 
 class StaticOrchestrator(AbstractOrchestrator):
-    def __init__(self, config: dict) -> None:
-        super().__init__(config)
+    def __init__(self, *, config: dict):
+        AbstractOrchestrator.__init__(self, config=config)
         self.allocations = {}
         for name, elements in config.get("static_allocations", {}).items():
             self.allocations[name] = [int(e) for e in elements]
@@ -279,6 +278,7 @@ class StaticOrchestrator(AbstractOrchestrator):
     def orchestrate(self, targetted: dict[int, list[int]], fill_assigned: bool = False) -> list[data.ObservingChannel]:
         self.validate_proxies()
         if not self.proxies:
+            logger.debug("will not orchestrate; no receiver proxies")
             return []
 
         actual_channels = []
@@ -290,7 +290,8 @@ class StaticOrchestrator(AbstractOrchestrator):
                 logger.info(f"no allocation for {proxy.name}")
             else:
                 allocated_names.add(proxy.name)
-                if proxy.channel is None or set(frequencies) != set(proxy.channel.frequencies):
+                logger.info(f'ORCHESTRATE PROXY {proxy} {proxy.channel}')
+                if not proxy.channel or set(frequencies) != set(proxy.channel.frequencies):
                     proxy.listen(frequencies)
                 if proxy.channel is not None:
                     actual_channels.append(proxy.channel)
@@ -522,13 +523,13 @@ class DiverseOrchestrator(UniformOrchestrator):
 
 
 class Reaper(bus.EventNotifier):
-    channels: dict[int, data.ObservingChannel]
-    last_seen: dict[int, int]
+    @functools.cached_property
+    def channels(self) -> dict[int, data.ObservingChannel]:
+        return {}
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.channels = {}
-        self.last_seen = {}
+    @functools.cached_property
+    def last_seen(self) -> dict[int, int]:
+        return {}
 
     async def run(self) -> None:
         while not util.is_shutting_down():
@@ -567,16 +568,16 @@ class Reaper(bus.EventNotifier):
 
 
 ORCHESTRATOR_LOOKUP = {
-    'diverse': DiverseOrchestrator,
-    'static': StaticOrchestrator,
-    'bfi': BFIOrchestrator,
+    "diverse": DiverseOrchestrator,
+    "static": StaticOrchestrator,
+    "bfi": BFIOrchestrator,
 }
 
 
 def pick_orchestrator(conductor_config: dict) -> AbstractOrchestrator:
-    orchestrator_type = conductor_config.get('type', 'diverse')
+    orchestrator_type = conductor_config.get("type", "diverse")
     klass = ORCHESTRATOR_LOOKUP[orchestrator_type]
-    return klass(conductor_config)
+    return klass(config=conductor_config)
 
 
 class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
@@ -586,15 +587,14 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     listener_info: dict
     conductor: AbstractOrchestrator
 
-    def __init__(self, config: collections.abc.Mapping) -> None:
-        super().__init__()
+    def __init__(self, *, config: collections.abc.Mapping):
         self.config = config
         self.uuid = f"@{uuid.uuid4()}"
         self.proxies = {}
         self.conductor = pick_orchestrator(config["conductor"])
         messaging.subscribe(self, self.uuid)
-        self.announcer = bus.PeriodicCallback(10, [self.announce], False)
-        self.watchdog = bus.PeriodicCallback(30, [self.heartbeat], chatty=False)
+        self.announcer = bus.PeriodicCallback(period=10, callbacks=[self.announce], chatty=False)
+        self.watchdog = bus.PeriodicCallback(period=30, callbacks=[self.heartbeat], chatty=False)
         self.last_orchestrated = util.now()
         # hackish.
         self.conductor.maybe_describe_receivers = self.maybe_describe_receivers  # type: ignore[method-assign]
@@ -631,6 +631,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
     def orchestrate(self) -> None:
         if util.is_shutting_down():
             return
+        logger.debug(f"orchestrating node {self}")
         self.last_orchestrated = util.now()
         self.orchestration_task = None
         targetted_freqs = network.STATIONS.active()
@@ -696,7 +697,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
                 messaging.publish_soon(messaging.Message(old_proxy.target, "deregister", old_proxy.uuid))
                 self.conductor.remove_receiver(old_proxy)
                 del self.proxies[name]
-        proxy = ReceiverProxy(name, uuid, widths, weight)
+        proxy = ReceiverProxy(name=name, uuid=uuid, observable_widths=widths, weight=weight)
         self.add_receiver_proxy(proxy)
         proxy.registered()
 
@@ -707,6 +708,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
             pass
         else:
             if proxy.uuid == uuid:
+                logger.debug(f"deregistering proxy {proxy}")
                 self.conductor.remove_receiver(proxy)
                 del self.proxies[name]
             proxy.deregistered()

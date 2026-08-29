@@ -1,6 +1,6 @@
 # hfdl_observer/messaging.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -40,7 +40,7 @@ class RemoteSubscriber(zero.ZeroSubscriber):
 
 
 class RemoteBroker:
-    def __init__(self, config: dict) -> None:
+    def __init__(self, *, config: dict):
         if not config:
             # with no config, this becomes a dummy
             self.configured = False
@@ -78,21 +78,18 @@ class AbstractSubscriber:
 
 
 class GenericSubscriber(AbstractSubscriber):
-    def __init__(self) -> None:
-        # this ties the cache to the instance. If decorating directly, instances are not necessarily GCd. ever.
-        self.get_message_handler = functools.cache(self.get_message_handler)  # type: ignore[method-assign]
+    @functools.cached_property
+    def get_message_handler(self) -> Callable[[str], Callable | None]:
+        def actual_message_handler(name: str) -> None | Callable:
+            return getattr(self, f"on_remote_{name.strip()}", None)
 
-    def get_message_handler(self, name: str) -> None | Callable:
-        return getattr(self, f"on_remote_{name.strip()}", None)
+        return functools.cache(actual_message_handler)
 
     def dispatch_message(self, message: Message) -> None:
         handler = self.get_message_handler(message.subject)
         if callable(handler):
             logger.debug(f"dispatching {message} via {handler}")
             handler(message)
-        else:
-            pass
-            # logger.debug(f'ignoring on_remote_{message.subject.strip()}')
 
 
 class Subscription:
@@ -100,7 +97,7 @@ class Subscription:
     subject: str
     subscriber: weakref.ReferenceType[AbstractSubscriber]
 
-    def __init__(self, subscriber: AbstractSubscriber, target: str = "", subject: str = "") -> None:
+    def __init__(self, *, subscriber: AbstractSubscriber, target: str = "", subject: str = ""):
         self.subscriber = weakref.ref(subscriber)
         self.target = target
         self.subject = subject
@@ -120,10 +117,10 @@ class Subscription:
 class _Broker:
     remote_broker: RemoteBroker | None = None
     remote_subscriber: RemoteSubscriber | None = None
-    subscribers: list[Subscription]
 
-    def __init__(self) -> None:
-        self.subscribers = []
+    @functools.cached_property
+    def subscribers(self) -> list[Subscription]:
+        return []
 
     def set_remote_broker(self, remote_broker: RemoteBroker) -> None:
         self.remote_broker = remote_broker
@@ -134,7 +131,7 @@ class _Broker:
         self.remote_subscriber.start()
 
     def subscribe(self, subscriber: AbstractSubscriber, target: str = "", subject: str = "") -> None:
-        self.subscribers.append(Subscription(subscriber, target, subject))
+        self.subscribers.append(Subscription(subscriber=subscriber, target=target, subject=subject))
 
     async def publish_locally(self, message: Message) -> None:
         dead = []

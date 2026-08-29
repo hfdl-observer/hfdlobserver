@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # configure.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 import pathlib
@@ -34,12 +34,19 @@ settings = yaml.safe_load(pathlib.Path("settings.yaml.base").read_text())
 
 w = Whiptail("Configure HFDL Observer", backtitle="A multi-headed dumphfdl receiver")
 
-w.msgbox("""Welcome to HFDL Observer. Let's set up a simple configuration.
-
-Web-888 can provide 13 streams of IQ data. HFDL Observer takes advantage of these to listen to as many useful HFDL frequencies as possible at any given time. In order to pick the right frequencies, you need to configure a prioritized list of station IDs.
-
-You can either specify the list of IDs directly, or the installer can make a good(?) guess depending on the latitude and longitude of your Web-888 device.
-""")
+w.msgbox(
+    "".join(
+        [
+            "Welcome to HFDL Observer. Let's set up a simple configuration.\n\n",
+            "Web-888 can provide 13 streams of IQ data. ",
+            "HFDL Observer takes advantage of these to listen to as many useful HFDL frequencies as possible at ",
+            "any given time. In order to pick the right frequencies, you need to configure a prioritized list of ",
+            "station IDs.\n\n",
+            "You can either specify the list of IDs directly, or the installer can make a good(?) guess depending ",
+            "on the latitude and longitude of your Web-888 device.",
+        ]
+    )
+)
 
 choice = w.menu("How would you like to rank stations?", ["Enter a list of IDs", "Determine from location"])
 if choice[1] == 1:
@@ -77,7 +84,7 @@ else:
             lat = float(s)
             break
         except Exception:
-            pass
+            w.msgbox("Invalid number, please try again.")
     while True:
         s, code = w.inputbox("Enter the device's latitude (decimal. positive is east, negative is west)")
         if code == 1:
@@ -86,7 +93,7 @@ else:
             long = float(s)
             break
         except Exception:
-            pass
+            w.msgbox("Invalid number, please try again.")
     import extras.guess_station_ranking as gss
 
     station_list = list(d[1] for d in gss.guess(lat, long))
@@ -107,9 +114,12 @@ if entered:
     default_path(settings, "dumphfdl", "default")["station_id"] = entered
 
 
-code = w.yesno("""
-[Optional] Do you want to retrieve community updates of active frequencies? This helps to keep your station listening to the most accurate list of active frequencies. Your local station will update frequencies as it receives status updates ("squitters"), but using community sources can fill in holes and gaps. It is entirely optional.
-""")
+code = w.yesno(
+    "[Optional] Do you want to retrieve community updates of active frequencies?"
+    " This helps to keep your station listening to the most accurate list of active frequencies."
+    ' Your local station will update frequencies as it receives status updates ("squitters"),'
+    " but using community sources can fill in holes and gaps. It is entirely optional."
+)
 
 if code:
     default_path(settings, "observer", "tracker")["station_updates"] = [

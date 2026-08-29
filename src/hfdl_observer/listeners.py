@@ -1,6 +1,6 @@
 # hfdl_observer/listeners.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -69,18 +69,8 @@ class UDPProtocol(asyncio.protocols.BaseProtocol):
         *head, tail = self.buffers[addr].split("\n")
 
         for line in head:
-            line = line.strip()
-            if not line.startswith("{"):
-                logger.debug(f"dropping garbage: {line}")
-                continue
-            try:
-                packet_data = json.loads(line)
-            except json.JSONDecodeError as err:
-                logger.warn(f"dropping garbage: {line}", exc_info=err)
-            else:
-                packet = hfdl_observer.hfdl.HFDLPacketInfo(packet_data)
-                logger.info(f"packet {packet}")
-                # self.on_hfdl(packet)
+            packet = hfdl_observer.hfdl.HFDLPacketInfo.from_raw(line)
+            if packet:
                 for consumer in self.consumers:
                     util.call_soon(consumer.consume, line, packet)
         if tail and len(tail) < 65536:  # primitive/naive stuffing check.
@@ -108,7 +98,7 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
             try:
                 self.transport.close()
             except RuntimeError:
-                pass
+                logger.debug("Ignoring RuntimeError while closing HFDL UDP transport during shutdown", exc_info=True)
         logger.debug("HFDL UDP listener done")
 
     def start(self, hfdl_consumers: list[HFDLPacketConsumer]) -> None:

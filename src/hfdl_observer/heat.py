@@ -1,6 +1,6 @@
 # hfdl_observer/heat.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -53,6 +53,9 @@ class RowHeader(Taggable):
             sid = ""
         return f"{self.tags_as_str()} {sid}{self.label}"
 
+    def as_dict(self) -> dict:
+        return {"value": self.label, "station_id": self.station_id, "tags": list(self._tags or [])}
+
 
 class ColumnHeader:
     index: int
@@ -82,6 +85,9 @@ class Cell(Taggable):
 
     def __str__(self) -> str:
         return f"{self.value}{self.tags_as_str()}"
+
+    def as_dict(self) -> dict:
+        return {"value": self.value, "tags": list(self._tags or [])}
 
 
 class Table(Generic[TableKeyT]):

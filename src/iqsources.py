@@ -1,6 +1,6 @@
 # iqsources.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -32,18 +32,16 @@ class KiwiClient:
     def __init__(self, name: str, config: collections.abc.MutableMapping):
         self.name = name
         self.config = config
-        super().__init__()
 
     def agc_file(self, center_freq: float) -> Optional[pathlib.Path]:
         agc = self.config["agc_files"]
         band = center_freq // 1000
         for k in [band, "*"]:
-            try:
-                agc_file = env.as_path(agc[k])
+            agc_value = agc.get(k)
+            if agc_value:
+                agc_file = env.as_path(agc_value)
                 if agc_file.exists():
                     return agc_file
-            except KeyError:
-                pass
         return None
 
     def commandline(self) -> list[str]:
@@ -115,9 +113,9 @@ class KiwiClientProcess(process.ProcessHarness, KiwiClient):
     def create_command(self) -> KiwiClientCommand:
         cmd = self.commandline()
         command = KiwiClientCommand(
-            self.logger,
-            cmd,
-            self.execution_arguments(),
+            parent_logger=self.logger,
+            cmd=cmd,
+            execution_arguments=self.execution_arguments(),
             recoverable_errors=[
                 "Too busy now. Reconnecting after 15 seconds",
                 "server closed the connection unexpectedly. Reconnecting after 5 seconds",

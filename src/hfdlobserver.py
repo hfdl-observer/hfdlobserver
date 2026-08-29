@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# main.py
+# hfdlobserver.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -37,7 +37,7 @@ import receivers
 if sys.version_info < (3, 11):
     from backports.asyncio.runner import Runner
 else:
-    from asyncio import Runner
+    Runner = asyncio.Runner
 
 
 logger = logging.getLogger(sys.argv[0].rsplit("/", 1)[-1].rsplit(".", 1)[0] if __name__ == "__main__" else __name__)
@@ -53,8 +53,8 @@ except ImportError:
 
 
 class HFDLObserverNode(receivers.ReceiverNode):
-    def __init__(self, config: collections.abc.Mapping) -> None:
-        super().__init__(config)
+    def __init__(self, *, config: collections.abc.Mapping):
+        receivers.ReceiverNode.__init__(self, config=config)
 
         for receiver_config in config["local_receivers"]:
             self.build_local_receiver(receiver_config)
@@ -74,17 +74,17 @@ class HFDLObserverNode(receivers.ReceiverNode):
         await asyncio.gather(*awaitables, return_exceptions=True)
 
 
-class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
+class HFDLObserverController(receivers.ReceiverNode, manage.ConductorNode):
     running: bool = True
     packet_watcher: orm.PacketWatcher
     previous_description: list[str] | None = None
 
-    def __init__(self, config: collections.abc.Mapping) -> None:
-        manage.ConductorNode.__init__(self, config)
-        receivers.ReceiverNode.__init__(self, config)
+    def __init__(self, *, config: collections.abc.Mapping):
+        manage.ConductorNode.__init__(self, config=config)
+        receivers.ReceiverNode.__init__(self, config=config)
         self.packet_watcher = orm.PacketWatcher()
         hfdl_observer.data.PACKET_WATCHER = self.packet_watcher
-        self.network_overview = manage.NetworkOverview(config["tracker"], network.UPDATER)
+        self.network_overview = manage.NetworkOverview(config=config["tracker"], updater=network.UPDATER)
         self.network_overview.watch_event("frequencies", self.on_frequencies)
         self.watch_event("orchestrated", self.maybe_describe_receivers)
 
@@ -106,6 +106,12 @@ class HFDLObserverController(manage.ConductorNode, receivers.ReceiverNode):
 
     def on_hfdl(self, packet: hfdl_observer.hfdl.HFDLPacketInfo) -> None:
         self.notify_event("packet", packet)
+
+    def on_local_hfdl_packet(self, packet: hfdl_observer.hfdl.HFDLPacketInfo) -> None:
+        if packet.spdu:
+            network.UPDATER.on_hfdl(packet)
+        self.on_hfdl(packet)
+        self.packet_watcher.on_hfdl(packet)
 
     def on_fatal_error(self, data: tuple[str, str]) -> None:
         receiver, error = data
@@ -193,7 +199,7 @@ async def async_observe(observer: HFDLObserverController | HFDLObserverNode) -> 
     logger.info("Starting observer")
 
     if TRACEMALLOC:
-        tracemallocery = TraceMallocery(60)
+        tracemallocery = TraceMallocery(period=60)
         tracemallocery.start()
     observer.start()
     try:
@@ -233,10 +239,10 @@ def observe(
                     message_broker.start()  # daemon thread, not async.
                     logger.info("waiting for remote broker")
                     message_broker.initialised.wait()
-                    remote_broker = messaging.RemoteBroker(broker_config)
+                    remote_broker = messaging.RemoteBroker(config=broker_config)
                     messaging._BROKER.set_remote_broker(remote_broker)
                 network.UPDATER = orm.NetworkUpdater()
-                observer = HFDLObserverController(settings)
+                observer = HFDLObserverController(config=settings)
                 cumulative = network.CumulativePacketStats()
                 observer.watch_event("packet", cumulative.on_hfdl)
                 if on_observer:
@@ -245,9 +251,9 @@ def observe(
                     # initialize headless
                     observer.network_overview.watch_event("state", observer.ministats)
             else:  # just a node for receivers.
-                remote_broker = messaging.RemoteBroker(broker_config)
+                remote_broker = messaging.RemoteBroker(config=broker_config)
                 messaging._BROKER.set_remote_broker(remote_broker)
-                observer = HFDLObserverNode(settings)
+                observer = HFDLObserverNode(config=settings)
             try:
                 runner.run(async_observe(observer))
             except KeyboardInterrupt:
@@ -286,7 +292,7 @@ def setup_logging(loghandler: Optional[logging.Handler], debug: bool = True, qui
 @click.option("--debug", help="Output debug/extra information.", is_flag=True)
 @click.option(
     "--node",
-    help="run as node only to connect with a remote Observer (implies headless)",
+    help="run as node only to connect with a remote Observer (implies --headless)",
     is_flag=True,
 )
 @click.option(
@@ -339,12 +345,13 @@ def command(
     try:
         headless = headless or node or not sys.stdout.isatty()
         if headless:
-            setup_logging(handler, debug, quiet)
-            observe(as_controller=not node)
+            import noui
+
+            noui.launch(handler, debug, quiet, is_node=node)
         else:
             import richui
 
-            richui.screen(handler, debug, quiet)
+            richui.launch(handler, debug, quiet)
     except Exception as exc:
         # will this catch the annoying libzmq assertion failures? nope.
         print(f"exiting due to exception: {exc}")

@@ -1,6 +1,6 @@
 # hfdl_observer/settings.py
 # copyright 2025 Kuupa Ork <kuupaork+github@hfdl.observer>
-# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver888/blob/main/LICENSE) for terms of use.
+# see LICENSE (or https://github.com/hfdl-observer/hfdlobserver/blob/main/LICENSE) for terms of use.
 # TL;DR: BSD 3-clause
 #
 
@@ -168,7 +168,8 @@ defaults: dict[str, Any] = {
             "show_confidence": True,
             "show_targetting": False,
             "flexible_width": False,
-        }
+        },
+        "secondary_displays": [],
     },
     "node": {"local_receivers": [], "messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},
     "viewer": {"messaging": {"host": "0.0.0.0", "pub_port": 5559, "sub_port": 5560}},
@@ -179,9 +180,7 @@ defaults: dict[str, Any] = {
             "shoulder": 0.8,
             "system_table": "systable.conf",
             "system_table_save": "systable_updated.conf",
-            "output": [
-                {"output": "hfdl_observer"},
-            ],
+            "output": [],
         }
     },
     "outputs": {
@@ -221,6 +220,7 @@ defaults: dict[str, Any] = {
         },
         "pipe888": {"type": "Web888PipeReceiver", "client": {"type": "KiwiClient"}, "decoder": {"type": "IQDecoder"}},
         "dummy": {"type": "DummyReceiver"},
+        "acars_router": {"type": "PullReceiver"},
         "airspyhf": {
             "type": "DirectReceiver",
             "decoder": {
