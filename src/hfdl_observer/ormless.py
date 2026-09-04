@@ -65,6 +65,7 @@ def db() -> sqlite3.Connection:
             # db() should only be called a handful of times (one for each thread in the db executor pool).
             with db_lock:
                 _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
+                _db.execute('PRAGMA journal_mode=WAL;')
                 StationAvailability._table(_db)
                 ReceivedPacket._table(_db)
         except Exception as err:
