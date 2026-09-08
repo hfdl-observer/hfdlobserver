@@ -515,6 +515,8 @@ class PullReceiver(LocalReceiver):
                     self.logger.info("encountered an error", exc_info=err)
                     yield process.CommandState("error")
                     break
+                finally:
+                    await self.disconnect()
         finally:
             self.logger.debug("finally closing")
             await self.stop()

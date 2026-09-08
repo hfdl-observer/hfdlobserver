@@ -187,7 +187,11 @@ class TableByFrequencyStation(Table[tuple[int, int]]):
                     if station:
                         row_header.station_id = station.station_id
                     else:
-                        row_header.station_id = network.STATIONS[freq].station_id
+                        try:
+                            row_header.station_id = network.STATIONS[freq].station_id
+                        except KeyError:
+                            logger.debug(f"skipping packet for {freq}")
+                            continue
 
                 if station:
                     if station.frequencies and freq in station.frequencies:

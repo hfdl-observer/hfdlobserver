@@ -115,7 +115,10 @@ class ObserverDisplay(baseui.SecondaryObserverDisplay):
             row_header_cell = row_header.as_dict()
             row_header_cell["row_num"] = ix
             if row_header.station_id:
-                station = network.STATIONS[row_header.station_id]
+                try:
+                    station = network.STATIONS[row_header.station_id]
+                except KeyError:
+                    continue
                 row_header_cell["station"] = {
                     "abbreviation": network.STATION_ABBREVIATIONS[row_header.station_id],
                     "name": station.station_name,

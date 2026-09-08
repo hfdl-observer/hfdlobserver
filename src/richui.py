@@ -25,7 +25,6 @@ import rich.text
 
 import hfdl_observer.baseui as baseui
 import hfdl_observer.bus as bus
-import hfdl_observer.data as data
 import hfdl_observer.heatmapui as heatmapui
 import hfdl_observer.network as network
 import hfdl_observer.settings as settings

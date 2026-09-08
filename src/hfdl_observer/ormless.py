@@ -64,7 +64,7 @@ def db() -> sqlite3.Connection:
             # The db_lock keeps initialize_db from being called multiple times on top of each other (or DML).
             # db() should only be called a handful of times (one for each thread in the db executor pool).
             with db_lock:
-                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
+                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True, autocommit=True)
                 _db.execute('PRAGMA journal_mode=WAL;')
                 StationAvailability._table(_db)
                 ReceivedPacket._table(_db)
@@ -420,8 +420,13 @@ class PacketWatcher(data.AbstractPacketWatcher):
         await util.in_db_thread(self._add_packet, packet_info)
         # messaging.publish_soon(util.Message('firehose', 'packet', packet))
 
-    def _add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> ReceivedPacket:
+    def _add_packet(self, packet_info: hfdl.HFDLPacketInfo) -> ReceivedPacket | None:
         position = packet_info.position or (None, None)
+        try:
+            station = network.STATIONS[packet_info.ground_station["id"]]
+        except KeyError:
+            logger.warning(f"dropping packet for station {packet_info.ground_station['id']}, system not yet ready?")
+            return None
         packet = ReceivedPacket(
             received=to_timestamp(util.now()),
             agent=packet_info.station or "(unknown)",
@@ -432,7 +437,7 @@ class PacketWatcher(data.AbstractPacketWatcher):
             latitude=position[0],
             longitude=position[1],
             receiver=network.receiver_for(packet_info.frequency),
-            freq_active=network.STATIONS[packet_info.ground_station["id"]].is_active(packet_info.frequency),
+            freq_active=station.is_active(packet_info.frequency),
         )
         packet._add()
         return packet
