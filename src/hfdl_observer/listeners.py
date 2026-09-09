@@ -8,7 +8,6 @@ import asyncio
 import asyncio.protocols
 import collections
 import functools
-import json
 import logging
 from typing import Any, Callable, Union
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import contextlib
 import dataclasses
 import datetime
 import functools
@@ -15,7 +16,7 @@ import itertools
 import logging
 import sqlite3
 import threading
-from typing import Iterable, Mapping, Optional, Sequence, Type, TypeVar
+from typing import Generator, Iterable, Mapping, Optional, Sequence, Type, TypeVar
 
 import hfdl_observer.data as data
 import hfdl_observer.hfdl as hfdl
@@ -64,7 +65,9 @@ def db() -> sqlite3.Connection:
             # The db_lock keeps initialize_db from being called multiple times on top of each other (or DML).
             # db() should only be called a handful of times (one for each thread in the db executor pool).
             with db_lock:
-                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True, autocommit=True)
+                _db = util.thread_local.db = sqlite3.connect(
+                    dburi, uri=True, check_same_thread=True, autocommit=True, timeout=10.0
+                )
                 _db.execute('PRAGMA journal_mode=WAL;')
                 StationAvailability._table(_db)
                 ReceivedPacket._table(_db)
@@ -72,6 +75,15 @@ def db() -> sqlite3.Connection:
             logger.error(f"Error opening database: {err}", exc_info=err)
             util.shutdown()
     return _db
+
+
+@contextlib.contextmanager
+def autoclose_cursor(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, None]:
+    cursor = conn.cursor()
+    try:
+        yield cursor
+    finally:
+        cursor.close()
 
 
 @dataclasses.dataclass
@@ -188,8 +200,9 @@ class StationAvailability(Table):
         """
         with db() as conn:
             conn.row_factory = cls.factory
-            row = conn.execute(sql, (station_id, pseudoframe, pseudoframe)).fetchone()
-            local_row = row.as_local() if row else None
+            with autoclose_cursor(conn) as cursor:
+                row = cursor.execute(sql, (station_id, pseudoframe, pseudoframe)).fetchone()
+                local_row = row.as_local() if row else None
         return local_row
 
 
@@ -291,16 +304,18 @@ class ReceivedPacket(Table):
     def _since(cls, when: int) -> Iterable[ReceivedPacket]:
         with db() as conn:
             conn.row_factory = cls.factory
-            yield from conn.execute("SELECT * FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when])
+            with autoclose_cursor(conn) as cursor:
+                yield from cursor.execute("SELECT * FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when])
 
     @classmethod
     def _count(cls, when: int) -> int | None:
         with db() as conn:
             conn.row_factory = None
-            for row in conn.execute(
-                "SELECT COUNT(*) FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when]
-            ):
-                return int(row[0])
+            with autoclose_cursor(conn) as cursor:
+                for row in cursor.execute(
+                    "SELECT COUNT(*) FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when]
+                ):
+                    return int(row[0])
             return None
 
     @classmethod
@@ -325,8 +340,10 @@ class ReceivedPacket(Table):
         result = [0] * limit
         with db() as conn:
             conn.row_factory = None
-            for row in conn.execute(query, [when, cutoff, when, limit]):
-                result[row[0]] = row[1]
+            with autoclose_cursor(conn) as cursor:
+                for row in cursor.execute(query, [when, cutoff, when, limit]):
+                    result[row[0]] = row[1]
+                cursor.fetchall()
         return result
 
     @classmethod
@@ -364,8 +381,10 @@ class ReceivedPacket(Table):
         result: list[tuple[int, BinCounterT]] = []
         with db() as conn:
             conn.row_factory = factory
-            for row in conn.execute(query, [since, factor, since]):
-                result.append(row)
+            with autoclose_cursor(conn) as cursor:
+                for row in cursor.execute(query, [since, factor, since]):
+                    result.append(row)
+                cursor.fetchall()
         return result
 
 

@@ -299,7 +299,7 @@ defaults: dict[str, Any] = {
         },
     },
     "db": {
-        "uri": "file:mem1?mode=memory&cache=shared",
+        "uri": "file:mem1?mode=memory",
         "horizon": 1,
     },
 }
