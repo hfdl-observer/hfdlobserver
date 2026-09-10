@@ -65,9 +65,7 @@ def db() -> sqlite3.Connection:
             # The db_lock keeps initialize_db from being called multiple times on top of each other (or DML).
             # db() should only be called a handful of times (one for each thread in the db executor pool).
             with db_lock:
-                _db = util.thread_local.db = sqlite3.connect(
-                    dburi, uri=True, check_same_thread=True, autocommit=True, timeout=10.0
-                )
+                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True, autocommit=True)
                 _db.execute('PRAGMA journal_mode=WAL;')
                 StationAvailability._table(_db)
                 ReceivedPacket._table(_db)
@@ -78,8 +76,9 @@ def db() -> sqlite3.Connection:
 
 
 @contextlib.contextmanager
-def autoclose_cursor(conn: sqlite3.Connection) -> Generator[sqlite3.Cursor, None, None]:
-    cursor = conn.cursor()
+def db_cursor() -> Generator[sqlite3.Cursor, None, None]:
+    cursor = db().cursor()
+    cursor.row_factory = None
     try:
         yield cursor
     finally:
@@ -109,7 +108,8 @@ class Table:
 
 @functools.cache
 def pagesize() -> int:  # currently unused.
-    return int(db().execute("PRAGMA page_size;").fetchone()[0])
+    with db_cursor() as cursor:
+        return int(cursor.execute("PRAGMA page_size;").fetchone()[0])
 
 
 @dataclasses.dataclass
@@ -198,11 +198,10 @@ class StationAvailability(Table):
         ORDER BY stratum DESC, valid_at_frame DESC
         LIMIT 1;
         """
-        with db() as conn:
-            conn.row_factory = cls.factory
-            with autoclose_cursor(conn) as cursor:
-                row = cursor.execute(sql, (station_id, pseudoframe, pseudoframe)).fetchone()
-                local_row = row.as_local() if row else None
+        with db_cursor() as cursor:
+            cursor.row_factory = cls.factory
+            row = cursor.execute(sql, (station_id, pseudoframe, pseudoframe)).fetchone()
+            local_row = row.as_local() if row else None
         return local_row
 
 
@@ -302,21 +301,18 @@ class ReceivedPacket(Table):
 
     @classmethod
     def _since(cls, when: int) -> Iterable[ReceivedPacket]:
-        with db() as conn:
-            conn.row_factory = cls.factory
-            with autoclose_cursor(conn) as cursor:
-                yield from cursor.execute("SELECT * FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when])
+        with db_cursor() as cursor:
+            cursor.row_factory = cls.factory
+            yield from cursor.execute("SELECT * FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when])
 
     @classmethod
     def _count(cls, when: int) -> int | None:
-        with db() as conn:
-            conn.row_factory = None
-            with autoclose_cursor(conn) as cursor:
-                for row in cursor.execute(
-                    "SELECT COUNT(*) FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when]
-                ):
-                    return int(row[0])
-            return None
+        with db_cursor() as cursor:
+            for row in cursor.execute(
+                "SELECT COUNT(*) FROM ReceivedPacket WHERE received >= ? ORDER BY received", [when]
+            ):
+                return int(row[0])
+        return None
 
     @classmethod
     async def count(cls, when: datetime.timedelta) -> int | None:
@@ -338,12 +334,10 @@ class ReceivedPacket(Table):
             LIMIT ?;
         """
         result = [0] * limit
-        with db() as conn:
-            conn.row_factory = None
-            with autoclose_cursor(conn) as cursor:
-                for row in cursor.execute(query, [when, cutoff, when, limit]):
-                    result[row[0]] = row[1]
-                cursor.fetchall()
+        with db_cursor() as cursor:
+            for row in cursor.execute(query, [when, cutoff, when, limit]):
+                result[row[0]] = row[1]
+            cursor.fetchall()
         return result
 
     @classmethod
@@ -379,12 +373,11 @@ class ReceivedPacket(Table):
         # Every element is either constructed in this method, or is a field name in the class or in QUERY_FRAGMENT.
         query = f"SELECT {','.join(columns)} FROM ReceivedPacket WHERE received > ? GROUP BY {groups}"
         result: list[tuple[int, BinCounterT]] = []
-        with db() as conn:
-            conn.row_factory = factory
-            with autoclose_cursor(conn) as cursor:
-                for row in cursor.execute(query, [since, factor, since]):
-                    result.append(row)
-                cursor.fetchall()
+        with db_cursor() as cursor:
+            cursor.row_factory = factory
+            for row in cursor.execute(query, [since, factor, since]):
+                result.append(row)
+            cursor.fetchall()
         return result
 
 

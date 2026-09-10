@@ -359,7 +359,17 @@ def ui_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoo
 
 @functools.cache
 def db_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoolExecutor:
-    return concurrent.futures.ThreadPoolExecutor(max_workers=5)
+    # if memory db, must be single threaded. If an actual file, we can multithread.
+    # this is ugly, but if we import during the ONE execution of this function, settings will already be
+    # initialized.
+    from . import settings
+    dburi = settings.db["uri"]
+    # a little naive, but I don't want to borrow the effort to cover all the highly unlikely cases.
+    if ":memory:" in dburi or "mode=memory" in dburi:
+        db_workers = 1
+    else:
+        db_workers = 5
+    return concurrent.futures.ThreadPoolExecutor(max_workers=db_workers)
 
 
 async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
