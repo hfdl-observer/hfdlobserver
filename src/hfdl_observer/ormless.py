@@ -65,7 +65,13 @@ def db() -> sqlite3.Connection:
             # The db_lock keeps initialize_db from being called multiple times on top of each other (or DML).
             # db() should only be called a handful of times (one for each thread in the db executor pool).
             with db_lock:
-                _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True, autocommit=True)
+                try:
+                    _db = util.thread_local.db = sqlite3.connect(
+                        dburi, uri=True, check_same_thread=True, autocommit=True
+                    )
+                except TypeError:
+                    # Old pythons don't know about the autocommit kwarg.
+                    _db = util.thread_local.db = sqlite3.connect(dburi, uri=True, check_same_thread=True)
                 _db.execute('PRAGMA journal_mode=WAL;')
                 StationAvailability._table(_db)
                 ReceivedPacket._table(_db)
