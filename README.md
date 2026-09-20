@@ -182,9 +182,9 @@ There are only a few settings that are of interest.
 
 ### Config Tab
 
-- `Enable ADC PGA?`: your choice. It’s safe to try either for a period.
+- `Enable ADC PGA?`: YES. According to user testing, it slightly improves consistent behaviour for dumphfdl.
 - `Correct ADC clock by GPS PPS`: YES if you have a GPS antenna connected.
-- `Enable ADC Dithering`: NO. This does not help the I/Q processing dumphfdl does.
+- `Enable ADC Dithering`: YES. According to user testing, it offers a small (~5%) improvement in sensitivity for HFDL.
 
 ### Public Tab
 
