@@ -432,7 +432,7 @@ class ProcessHarness(Runnable):
         if self.command:
             await self.command.stop()
         else:
-            logger.debug(f"{self} has no command, stop ignored.")
+            logger.debug(f"{self} has no command, stop is NOP.")
 
     async def kill(self) -> None:
         if self.command:

@@ -79,7 +79,7 @@ class ObservingChannel:
         ):
             self._frequencies.add(frequency)
             return True
-        return False
+        return frequency in self._frequencies
 
     def maybe_add_all(self, frequencies: list[int]) -> bool:
         # all or nothing.
@@ -94,7 +94,7 @@ class ObservingChannel:
         ):
             self._frequencies |= set(frequencies)
             return True
-        return False
+        return all(f in self._frequencies for f in frequencies)
 
     def clone(self) -> "ObservingChannel":
         return ObservingChannel(self.allowed_width_hz, self.frequencies)
@@ -119,7 +119,7 @@ class ChannelObserver:
             return 0
         max_hz = max(frequencies) * 1000
         min_hz = min(frequencies) * 1000
-        needed = max(hfdl.HFDL_CHANNEL_WIDTH, max_hz - min_hz)
+        needed = max(hfdl.HFDL_CHANNEL_WIDTH * 2, max_hz - min_hz)  # minimum width must consider Nyquist factor.
         return needed
 
     def width_for(self, frequencies: list[int]) -> int:

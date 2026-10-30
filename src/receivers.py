@@ -72,7 +72,7 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if message.target == self.target:
             payload: list[int] = message.payload
             util.schedule(self.listen(payload))
-            logger.debug(f"{self.target} told to listen")
+            logger.debug(f"{self.target} told to listen to {payload}")
         else:
             logger.info(f"{self.target} told to listen to {message.target}'s frequencies")
 
@@ -190,10 +190,11 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         if not self.can_listen_to(frequencies):
             self.logger.warning(f"frequency list is invalid: {frequencies}")
             return
-        self.logger.info(f"switching to {frequencies} from {self.frequencies}")
         await self.stop()
+        old_frequencies = self.frequencies
         self.frequencies = frequencies
         if frequencies or self.always_listen:
+            self.logger.info(f"switching to {old_frequencies} to {frequencies}")
             self.channel = self.observing_channel_for(frequencies)
             self.logger.info(f"switched to {frequencies}")
             _state = None
