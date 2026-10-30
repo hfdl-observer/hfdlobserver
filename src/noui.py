@@ -24,7 +24,7 @@ import webui
 class NoDisplay(baseui.PrimaryDisplay):
     current_width = 256  # Not sure what to do for a static value
 
-    def update_heatmap(self, heatmap_data: Sequence) -> None:
+    def update_heatmap(self, spans: Sequence) -> None:
         for secondary in self.secondary_displays:
             secondary.update()
 

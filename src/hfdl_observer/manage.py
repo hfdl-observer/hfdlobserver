@@ -597,7 +597,7 @@ class ConductorNode(bus.EventNotifier, messaging.GenericSubscriber):
         self.watchdog = bus.PeriodicCallback(period=30, callbacks=[self.heartbeat], chatty=False)
         self.last_orchestrated = util.now()
         # hackish.
-        self.conductor.maybe_describe_receivers = self.maybe_describe_receivers  # type: ignore[method-assign]
+        self.conductor.maybe_describe_receivers = self.maybe_describe_receivers  # type: type: ignore[method-assign]  # ty: ignore[invalid-assignment]
 
     def maybe_describe_receivers(self, *_: Any, force: bool = False) -> None:
         raise NotImplementedError(self.__class__.__name__)

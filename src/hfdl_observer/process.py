@@ -5,6 +5,7 @@
 #
 # flake8: noqa [W503]
 
+from abc import abstractmethod
 import asyncio
 import asyncio.subprocess
 import contextlib
@@ -49,6 +50,7 @@ class Command:
     fire_once: bool = True
     current_state: CommandState | None = None
     watcher_task: None | asyncio.Task = None
+    stopping = False
 
     def __init__(
         self,
@@ -107,7 +109,7 @@ class Command:
     def is_running(self) -> bool:
         return self.current_state is not None and self.current_state.event not in ["error", "done"]
 
-    async def lifecycle(self) -> AsyncGenerator:
+    async def lifecycle(self) -> AsyncGenerator[CommandState, None]:
         self.logger.debug("executing command")
         retcode: int | None = None
         try:
@@ -183,11 +185,12 @@ class Command:
             yield CommandState("done", retcode, process=self.process)
             self.process = None
 
-    async def execute(self) -> AsyncGenerator:
+    async def execute(self) -> AsyncGenerator[CommandState, None]:
         if self.execution_event:
             self.logger.info("Command has been executed, joining its execution")
             await self.execution_event.wait()
             return
+        self.stopping = False
         self.current_state = CommandState("starting")
         self.execution_event = execution_event = asyncio.Event()
         try:
@@ -240,18 +243,21 @@ class Command:
             logger.debug(f"signal {sig} is a no op... {process}, {execution_event}")
 
     async def kill(self) -> None:
+        self.stopping = True
         await self.signal(signal.SIGKILL)
 
     async def terminate(self) -> None:
+        self.stopping = True
         await self.signal(signal.SIGTERM)
         await self.kill()
 
     async def stop(self) -> None:
+        self.stopping = True
         await self.signal(signal.SIGINT)
         await self.terminate()
 
     @contextlib.asynccontextmanager
-    async def watch_stderr(self, pid: int, stream: Optional[asyncio.StreamReader]) -> AsyncIterator[asyncio.Task]:
+    async def watch_stderr(self, pid: int, stream: asyncio.StreamReader | None) -> AsyncGenerator[asyncio.Task, None]:
         if stream is None:
             self.process_logger.warning(f"{self} no stderr stream to watch")
         else:
@@ -274,12 +280,14 @@ class Command:
                         line = data.decode("utf8").rstrip()
                     except UnicodeDecodeError:
                         continue
-                    stream_logger.info(line)
                     if any(re.search(pattern, line) for pattern in self.unrecoverable_errors):
-                        stream_logger.warning(f'encountered unrecoverable error: "{line}".')
+                        if not self.stopping:
+                            stream_logger.warning(f'encountered unrecoverable error: "{line}".')
                         # terminate, subclasses can restart process if desired.
                         await self.stop()
                         break
+                    else:
+                        stream_logger.info(line)
                     if any(re.search(pattern, line) for pattern in self.recoverable_errors):
                         self.recoverable_error_count += 1
                         stream_logger.debug(f"recoverable error detected. Current count {self.recoverable_error_count}")
@@ -319,22 +327,38 @@ class Command:
             self.watcher_task.cancel()
 
 
-class ProcessHarness:
+class Runnable:
+    @abstractmethod
+    async def stop(self) -> None:
+        raise NotImplementedError(self.__class__.__name__)
+
+    @abstractmethod
+    def is_running(self) -> bool:
+        raise NotImplementedError(self.__class__.__name__)
+
+    @abstractmethod
+    async def run(self) -> AsyncGenerator[CommandState, None]:
+        raise NotImplementedError(self.__class__.__name__)
+        yield None
+
+    @functools.cached_property
+    def logger(self) -> logging.Logger:
+        return logging.getLogger(str(self))
+
+
+class ProcessHarness(Runnable):
     settle_time: float = 0
     backoff_time: float = 0
     command: Optional[Command] = None
     starting_event: asyncio.Event
 
     @functools.cached_property
-    def logger(self) -> logging.Logger:
-        return logging.getLogger(str(self))
-
-    @functools.cached_property
     def previous_pids(self) -> list[int]:
         return []
 
+    @abstractmethod
     def create_command(self) -> Command:
-        raise NotImplementedError()
+        raise NotImplementedError(self.__class__.__name__)
 
     async def on_prepare(self) -> None:
         for pid in self.previous_pids[:]:
@@ -367,18 +391,20 @@ class ProcessHarness:
         logger.debug(f"cleanup {self.command}")
         self.command = None
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[CommandState, None]:
+        logger.info(f"{self} entering run")
         if self.command:
             logger.info(f"{self} stopping existing command")
             await self.command.stop()
         try:
             pid = None
+            self.logger.info("creating command")
             command: Command = self.create_command()
         except ValueError:
             logger.info("no command to execute.")
         else:
             self.command = command
-            logger.debug(f"{self} command set to {command}")
+            logger.info(f"{self} command set to {command}")
             await asyncio.sleep(0)
             try:
                 async with util.aclosing(command.execute()) as executor:
@@ -400,13 +426,13 @@ class ProcessHarness:
         finally:
             self.logger.debug(f"{command} lifecycle ended ({pid})")
             self.cleanup()
+        self.logger.info("exiting run")
 
     async def stop(self) -> None:
         if self.command:
             await self.command.stop()
         else:
             logger.debug(f"{self} has no command, stop ignored.")
-        return None
 
     async def kill(self) -> None:
         if self.command:

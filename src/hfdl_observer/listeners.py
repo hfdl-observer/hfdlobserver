@@ -60,7 +60,7 @@ class UDPProtocol(asyncio.protocols.BaseProtocol):
         self.transport = transport
 
     def connection_lost(self, exc: Union[None, Exception]) -> None:
-        logger.warn(exc)
+        logger.warning(exc)
 
     def datagram_received(self, data: bytearray, addr: Any) -> None:
         message = data.decode()
@@ -105,7 +105,7 @@ class HFDLListener(hfdl_observer.bus.EventNotifier):
             self.settings["address"]
             self.settings["port"]
         except KeyError:
-            logger.warn("Missing HFDL Listener configuration, not starting one.")
+            logger.warning("Missing HFDL Listener configuration, not starting one.")
         else:
             self.running = True
             util.schedule(self.run(hfdl_consumers))

@@ -107,7 +107,7 @@ class HFDLPacketInfo(PathingWrapper):
 
     @property
     def when(self) -> datetime.datetime:
-        return datetime.datetime.utcfromtimestamp(self.timestamp)
+        return datetime.datetime.fromtimestamp(self.timestamp, datetime.timezone.utc)
 
     def decode_pos(self, lat: dict | str | float, lon: dict | str | float) -> tuple[float, float] | None:
         def decode(p: dict | str | float) -> float:
@@ -377,7 +377,7 @@ class HFDLPacketInfo(PathingWrapper):
         try:
             packet_data = json.loads(line)
         except json.JSONDecodeError as err:
-            logger.warn(f"dropping garbage: {line}", exc_info=err)
+            logger.warning(f"dropping garbage: {line}", exc_info=err)
         else:
             packet = cls(packet_data)
             logger.info(f"packet {packet}")

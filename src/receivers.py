@@ -4,6 +4,7 @@
 # TL;DR: BSD 3-clause
 #
 
+from abc import abstractmethod
 import asyncio
 import collections
 import collections.abc
@@ -13,7 +14,7 @@ import logging
 import random
 import socket
 import uuid
-from typing import Any, AsyncGenerator, Awaitable, MutableMapping, Optional
+from typing import Any, AsyncGenerator, Awaitable, Mapping, MutableMapping, Optional
 
 import decoders
 import hfdl_observer.bus as bus
@@ -35,6 +36,7 @@ class ReceiverError(Exception):
 class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSubscriber):
     frequencies: list[int]
     name: str
+    config: Mapping
     tasks: list[asyncio.Task]
     conductor: Optional[str] = None
     last_seen: datetime.datetime
@@ -151,9 +153,6 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
         self.conductor = None
         self.keepalive()
 
-    def setup_harnesses(self) -> None:
-        raise NotImplementedError(str(self.__class__))
-
     def keepalive(self) -> None:
         self.last_seen = util.now()
 
@@ -180,10 +179,16 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
     def is_running(self) -> bool:
         return False
 
+    def can_listen_to(self, frequencies: list[int]) -> bool:
+        return True
+
     async def listen(self, frequencies: list[int]) -> None:
         if self.is_running() and set(frequencies) == set(self.frequencies):
             self.logger.info(f"already listening to {frequencies}")
             self.publish_listening()
+            return
+        if not self.can_listen_to(frequencies):
+            self.logger.warning(f"frequency list is invalid: {frequencies}")
             return
         self.logger.info(f"switching to {frequencies} from {self.frequencies}")
         await self.stop()
@@ -213,10 +218,6 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
     async def stop(self) -> None:
         pass
 
-    async def run(self) -> AsyncGenerator:
-        raise NotImplementedError(str(self.__class__))
-        yield None  # mypy gets confused without this.
-
     def clear(self) -> None:
         logger.info(f"{self} clearing frequencies")
         self.frequencies = []
@@ -236,52 +237,51 @@ class LocalReceiver(bus.EventNotifier, data.ChannelObserver, messaging.GenericSu
     def describe_components(self) -> list[str]:
         return []
 
-
-class Web888Receiver(LocalReceiver):
-    shell: bool = False
-
     def observable_widths(self) -> list[int]:
         return [int(self.config.get("channel_width", 12000))]
 
+    @abstractmethod
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
+        raise NotImplementedError(str(self.__class__))
+        yield None  # mypy gets confused without this.
 
-class DummyReceiver(Web888Receiver):
-    client: iqsources.DummyClient | None = None
+    @abstractmethod
+    def setup_harnesses(self) -> None:
+        raise NotImplementedError(str(self.__class__))
+
+
+class DummyReceiver(LocalReceiver):
+    client: iqsources.DummySource | None = None
     decoder: decoders.DummyDecoder | None = None
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.DummyClient(name=self.name, config=self.config.get("client", {}))
+            self.client = iqsources.DummySource(name=self.name, config=self.config.get("client", {}))
         if not self.decoder:
             self.decoder = decoders.DummyDecoder(
                 name=self.name, config=self.config.get("decoder", {}), listener=self.listener
             )
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
         self.publish_listening()
         yield process.CommandState("done")
 
 
-class Web888ExecReceiver(Web888Receiver):
+class StreamingReceiver(LocalReceiver):
     pipe: util.Pipe
-    client: iqsources.KiwiClientProcess | None = None
+    client: iqsources.PipingIQSource | None = None
     decoder: decoders.IQDecoderProcess | None = None
 
+    @abstractmethod
     def setup_harnesses(self) -> None:
-        if not self.client:
-            self.client = iqsources.KiwiClientProcess(
-                self.name, self.config.get("client", {}), int(self.config.get("channel_width", 12000))
-            )
-        if not self.decoder:
-            self.decoder = decoders.IQDecoderProcess(
-                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
-            )
+        raise NotImplementedError(self.__class__.__name__)
 
     def is_running(self) -> bool:
         return (self.client is not None and self.client.is_running()) or (
             self.decoder is not None and self.decoder.is_running()
         )
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
         self.publish_listening()
         if not self.channel:
             logger.debug(f"{self} channel was empty")
@@ -292,16 +292,18 @@ class Web888ExecReceiver(Web888Receiver):
         if self.decoder is None:
             raise ValueError("decoder not set up. This should not be reached")
 
-        yield None  # FIXME
+        yield process.CommandState("setup")
 
         channel = self.channel
-        client: iqsources.KiwiClientProcess = self.client
+        client: iqsources.PipingIQSource = self.client
         decoder: decoders.IQDecoderProcess = self.decoder
 
         with util.Pipe() as pipe:
             client.pipe = decoder.pipe = pipe
 
-            async def exhaust(lifecycle: AsyncGenerator | None, other: process.ProcessHarness) -> None:
+            async def exhaust(
+                lifecycle: AsyncGenerator[process.CommandState, None] | None, other: process.Runnable
+            ) -> None:
                 if lifecycle is not None:
                     await asyncio.sleep(0)
                     async with util.aclosing(lifecycle):
@@ -309,13 +311,15 @@ class Web888ExecReceiver(Web888Receiver):
                             await asyncio.sleep(0)
                     await other.stop()
 
-            client_run = client.listen(channel)
-            decoder_run: AsyncGenerator | None = None
+            client_run: AsyncGenerator[process.CommandState, None] = client.listen(channel)
+            decoder_run: AsyncGenerator[process.CommandState, None] | None = None
             # don't use aclosing here because we need both to be awaitable in parallel, so we only loop through
             # states until we can start the decoder.
             async for client_state in client_run:
+                logger.info(f"{self} client state {client_state}")
                 match client_state.event:
                     case "running":
+                        logger.info(f"starting decoder {decoder}")
                         decoder_run = decoder.listen(channel)
                         break
             await asyncio.sleep(0)  # should exit from running agen to allow it to be exhausted?
@@ -324,6 +328,7 @@ class Web888ExecReceiver(Web888Receiver):
                 exhaust(client_run, decoder),
                 exhaust(decoder_run, client),
             ]
+            logger.info(f"main section... awaiting {awaitables}")
             try:
                 client_result, decoder_result = await asyncio.gather(*awaitables, return_exceptions=True)
                 if isinstance(client_result, Exception) and decoder.is_running():
@@ -367,6 +372,20 @@ class Web888ExecReceiver(Web888Receiver):
         return out
 
 
+class Web888ExecReceiver(StreamingReceiver):
+    pipe: util.Pipe
+
+    def setup_harnesses(self) -> None:
+        if not self.client:
+            self.client = iqsources.KiwiClientProcess(
+                self.name, self.config.get("client", {}), int(self.config.get("channel_width", 12000))
+            )
+        if not self.decoder:
+            self.decoder = decoders.IQDecoderProcess(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
+
+
 class ReceiverPipe(process.ProcessHarness):
     cmd: list[str]
 
@@ -377,15 +396,25 @@ class ReceiverPipe(process.ProcessHarness):
     def commandline(self) -> list[str]:
         return self.cmd
 
+    def create_command(self) -> process.Command:
+        cmd = self.commandline()
+        command = process.Command(
+            parent_logger=self.logger,
+            cmd=cmd,
+            execution_arguments={},
+            valid_return_codes=[],
+        )
+        return command
 
-class Web888PipeReceiver(Web888Receiver):
-    client: iqsources.KiwiClient | None = None
+
+class Web888PipeReceiver(LocalReceiver):
+    client: iqsources.KiwiClientStub | None = None
     decoder: decoders.IQDecoder | None = None
     receiver_pipe: None | ReceiverPipe = None
 
     def setup_harnesses(self) -> None:
         if not self.client:
-            self.client = iqsources.KiwiClient(self.name, self.config.get("client", {}))
+            self.client = iqsources.KiwiClientStub(self.name, self.config.get("client", {}))
         if not self.decoder:
             self.decoder = decoders.IQDecoder(
                 name=self.name, config=self.config.get("decoder", {}), listener=self.listener
@@ -393,7 +422,7 @@ class Web888PipeReceiver(Web888Receiver):
         if not self.receiver_pipe:
             self.receiver_pipe = ReceiverPipe(cmd=self.client.commandline() + ["|"] + self.decoder.commandline())
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
         if self.receiver_pipe is not None:
             async with util.aclosing(self.receiver_pipe.run()) as lifecycle:
                 async for current_state in lifecycle:
@@ -423,7 +452,7 @@ class DirectReceiver(LocalReceiver):
     def is_running(self) -> bool:
         return self.decoder is not None and self.decoder.is_running()
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
         if self.decoder is None:
             logger.info(f"{self} has no decoder")
             return
@@ -475,7 +504,7 @@ class PullReceiver(LocalReceiver):
     def is_running(self) -> bool:
         return self.reader is not None or self.writer is not None
 
-    async def run(self) -> AsyncGenerator:
+    async def run(self) -> AsyncGenerator[process.CommandState, None]:
         self.running = True
         self.publish_listening()
         try:
@@ -485,7 +514,7 @@ class PullReceiver(LocalReceiver):
             self.running = False
             self.frequencies = []
 
-    async def _run(self) -> AsyncGenerator:
+    async def _run(self) -> AsyncGenerator[process.CommandState, None]:
         try:
             yield process.CommandState("preparing")
             while self.running:
@@ -534,7 +563,7 @@ class PullReceiver(LocalReceiver):
             self.reader, self.writer = await asyncio.open_connection(self.remote_host, self.remote_port)
             # set additional options on socket to detect timeouts/disconnects.
             # This is not really portable, and something of a linuxism/unixism.
-            sock = self.writer.get_extra_info('socket')
+            sock = self.writer.get_extra_info("socket")
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 32)
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 32)
@@ -569,6 +598,30 @@ class PullReceiver(LocalReceiver):
         return data.ObservingChannel(0, frequencies)
 
 
+class KA9QDynamicReceiver(StreamingReceiver):
+    sample_rates: list[tuple[int, int]]
+
+    def __init__(self, *, name: str, config: collections.abc.MutableMapping):
+        super().__init__(name=name, config=config)
+        self.sample_rates = sorted(util.normalize_ranges(self.config["sample-rates"]))
+
+    def setup_harnesses(self) -> None:
+        if not self.client:
+            self.client = iqsources.KA9QDynamicSource(self.name, self.config.get("client", {}))
+            self.client.sample_rates = self.sample_rates
+        if not self.decoder:
+            self.decoder = decoders.IQDecoderProcess(
+                name=self.name, config=self.config.get("decoder", {}), listener=self.listener
+            )
+
+    def observable_widths(self) -> list[int]:
+        return [int(min(x)) for x in self.sample_rates]
+
+    def width_for(self, frequencies: list[int]) -> int:
+        needed = self.required_width(frequencies)
+        return util.best_sample_rate(needed, self.config.get("shoulder", 1.0), self.sample_rates)
+
+
 class ReceiverNode:
     local_receivers: list[LocalReceiver]
 
@@ -582,7 +635,9 @@ class ReceiverNode:
             klass = globals()[typename]
             receiver: LocalReceiver = klass(name=receiver_config["name"], config=receiver_config)
         except KeyError:
-            raise ValueError(f"Config for receiver `{receiver_config.get('receiver', '(unknown)')}` is malformed")
+            raise ValueError(
+                f"Config for receiver `{receiver_config.get('receiver', '(unknown)')}` is malformed"
+            ) from None
         receiver.watch_event("fatal", self.on_fatal_error)
         receiver.watch_event("hfdl", self.on_local_hfdl_packet)
         self.local_receivers.append(receiver)
@@ -601,7 +656,7 @@ class ReceiverNode:
         logger.debug(f"{self} stopped")
         await asyncio.gather(*self.outstanding_awaitables(), return_exceptions=True)
 
-    def on_fatal_error(self, _: Any) -> None:
+    def on_fatal_error(self, data: Any) -> None:
         pass
 
     def on_local_hfdl_packet(self, packet: hfdl.HFDLPacketInfo) -> None:

@@ -372,13 +372,17 @@ def db_executor(loop: asyncio.AbstractEventLoop) -> concurrent.futures.ThreadPoo
     return concurrent.futures.ThreadPoolExecutor(max_workers=db_workers)
 
 
-async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
+def task_in_thread(func: Callable, *args: Any, **kwargs: Any) -> asyncio.Future[Any]:
     # Runs a function in a separate thread via an executor in the current event loop so it can be awaited.
     def run() -> Any:
         return func(*args, **kwargs)
 
     loop: asyncio.AbstractEventLoop = thread_local.loop
-    return await loop.run_in_executor(thread_executor(loop), run)
+    return loop.run_in_executor(thread_executor(loop), run)
+
+
+async def in_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
+    return await task_in_thread(func, *args, **kwargs)
 
 
 async def in_db_thread(func: Callable, *args: Any, **kwargs: Any) -> Any:
@@ -472,3 +476,14 @@ def distance(origin: tuple[float, float], destination: tuple[float, float]) -> f
     d = radius * c
 
     return d
+
+
+def best_sample_rate(channel_width_hz: int, shoulder: float, sample_rates: list[tuple[int, int]]) -> int:
+    # sample rate handling is special; the config value is a list of range-or-values. We have to pick the "best".
+    sample_rate_needed = int(channel_width_hz / float(shoulder))
+    for sample_rate in sample_rates:
+        if sample_rate_needed <= sample_rate[1]:
+            exact = sample_rate[0] != sample_rate[1]
+            logger.debug(f"sample rate {sample_rate_needed} [{sample_rate[0]}-{sample_rate[1]}] (exact? {exact})")
+            return sample_rate_needed if exact else sample_rate[1]
+    raise ValueError(f"cannot find an acceptable sample rate for needed width {sample_rate_needed}")

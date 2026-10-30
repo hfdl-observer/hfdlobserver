@@ -33,7 +33,7 @@ class BaseDecoder:
     channel: hfdl_observer.data.ObservingChannel
     config: collections.abc.Mapping
 
-    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
+    def __init__(self, *, name: str, config: Mapping, listener: hfdl_observer.data.ListenerConfig):
         self.name = name
         self.config = config
         self.listener = listener
@@ -43,7 +43,7 @@ class BaseDecoder:
         result: str | None = self.config.get("station_id", None)
         return result
 
-    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
+    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator[process.CommandState, None]:
         raise NotImplementedError()
         yield None  # mypy gets confused without this.
 
@@ -146,6 +146,8 @@ class Dumphfdl(BaseDecoder):
 
 
 class IQDecoder(Dumphfdl):
+    encoding: str = "CS16"
+
     def listen_args(self) -> list[str]:
         return [
             "--iq-file",
@@ -153,7 +155,7 @@ class IQDecoder(Dumphfdl):
             "--sample-rate",
             str(self.channel.allowed_width_hz),
             "--sample-format",
-            "CS16",
+            self.config.get("encoding", self.encoding),
             "--read-buffer-size",
             "9600",
             "--centerfreq",
@@ -164,7 +166,7 @@ class IQDecoder(Dumphfdl):
 class IQDecoderProcess(process.ProcessHarness, IQDecoder):
     pipe: util.Pipe
 
-    def __init__(self, *, name: str, config: dict, listener: hfdl_observer.data.ListenerConfig):
+    def __init__(self, *, name: str, config: Mapping, listener: hfdl_observer.data.ListenerConfig):
         IQDecoder.__init__(self, name=name, config=config, listener=listener)
         process.ProcessHarness.__init__(self)
         self.settle_time = config.get("settle_time", 0) + random.randrange(1, 1000) / 1000.0  # nosec
@@ -178,18 +180,25 @@ class IQDecoderProcess(process.ProcessHarness, IQDecoder):
             "pass_fds": (self.pipe.read,),
         }
 
-    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
+    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator[process.CommandState, None]:
         self.channel = channel
         if self.channel and self.channel.frequencies:
             async with util.aclosing(self.run()) as lifecycle:
                 async for state in lifecycle:
+                    self.logger.debug(f"reached state {state}")
                     match state.event:
                         case "running":
                             self.pipe.close_read()
                     yield state
+        else:
+            self.logger.info(f"Not decoding {channel}")
 
     def create_command(self) -> IQDecoderCommand:
-        cmd = self.commandline()
+        try:
+            cmd = self.commandline()
+        except Exception as exc:
+            self.logger.error("creating command", exc_info=exc)
+            raise
         command = IQDecoderCommand(
             parent_logger=self.logger,
             cmd=cmd,
@@ -200,7 +209,7 @@ class IQDecoderProcess(process.ProcessHarness, IQDecoder):
 
 
 class DummyDecoder(IQDecoderProcess):
-    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
+    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator[process.CommandState, None]:
         self.channel = channel
         logger.debug(f"{self} command {self.commandline()}")
         logger.debug(f"{self} listening on {channel}")
@@ -234,7 +243,7 @@ class DirectDecoder(process.ProcessHarness, Dumphfdl):
     def execution_arguments(self) -> dict:
         return {}
 
-    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
+    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator[process.CommandState, None]:
         self.channel = channel
         if self.channel and self.channel.frequencies:
             async with util.aclosing(self.run()) as lifecycle:
@@ -297,14 +306,7 @@ class SoapySDRDecoder(DirectDecoder):
         return args
 
     def best_sample_rate(self) -> int:
-        # sample rate handling is special; the config value is a list of range-or-values. We have to pick the "best".
-        sample_rate_needed = int(self.channel.width_hz / float(self.config.get("shoulder", 1.0)))
-        for sample_rate in self.sample_rates:
-            if sample_rate_needed <= sample_rate[1]:
-                exact = sample_rate[0] != sample_rate[1]
-                logger.debug(f"sample rate {sample_rate_needed} [{sample_rate[0]}-{sample_rate[1]}] (exact? {exact})")
-                return sample_rate_needed if exact else sample_rate[1]
-        raise ValueError(f"cannot find an acceptable sample rate for needed width {sample_rate_needed}")
+        return util.best_sample_rate(self.channel.width_hz, self.config.get("shoulder", 1.0), self.sample_rates)
 
     def observable_channel_widths(self) -> list[int]:
         shoulder = self.config.get("shoulder", 1.0)
@@ -337,7 +339,7 @@ class RX888mk2Decoder(SoapySDRDecoder):
         logger.debug(f"COMMAND: {cmd}")
         return cmd
 
-    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator:
+    async def listen(self, channel: hfdl_observer.data.ObservingChannel) -> AsyncGenerator[process.CommandState, None]:
         async with util.aclosing(super().listen(channel)) as lifecycle:
             async for state in lifecycle:
                 match state.event:

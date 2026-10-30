@@ -322,6 +322,7 @@ class CumulativePacketStats(bus.EventNotifier):
             "squitters": self.squitters,
         }
 
+DUMMY_STATION = Station(-1, "unknown", 0, 0, [], [])
 
 class StationLookup:
     by_id: dict[int, Station]

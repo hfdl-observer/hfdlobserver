@@ -134,7 +134,7 @@ class AbstractHeatMapFormatter(Generic[TableSourceT, TableKeyT]):
 class HeatMapConsumer:
     current_width: int
 
-    def update_heatmap(self, heatmap_data: Sequence) -> None:
+    def update_heatmap(self, spans: Sequence) -> None:
         raise NotImplementedError()
 
     def will_render(self, source: AbstractHeatMapFormatter, cells_visible: int, bin_str: str) -> None:

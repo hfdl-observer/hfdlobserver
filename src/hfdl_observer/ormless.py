@@ -96,7 +96,7 @@ class Table:
     @classmethod
     def factory(cls, cursor: sqlite3.Cursor, row: Sequence) -> Table:
         fields = [column[0] for column in cursor.description]
-        data = {k.strip("_"): v for k, v in zip(fields, row)}
+        data = {k.strip("_"): v for k, v in zip(fields, row, strict=True)}
         cls.preprocess_data(data)
         return cls(**data)
 
@@ -135,7 +135,7 @@ class StationAvailability(Table):
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
         # this method should run only once.
-        cls._table = cls._already_ran  # type: ignore[method-assign]
+        cls._table = cls._already_ran  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
         _db.execute("""
             CREATE TABLE IF NOT EXISTS StationAvailability (
             station_id INTEGER NOT NULL,
@@ -238,7 +238,7 @@ class ReceivedPacket(Table):
     @classmethod
     def _table(cls, _db: sqlite3.Connection) -> None:
         # this method should run only once.
-        cls._table = cls._already_ran  # type: ignore[method-assign]
+        cls._table = cls._already_ran  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
         with _db as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS ReceivedPacket (

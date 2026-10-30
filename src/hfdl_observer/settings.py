@@ -70,21 +70,25 @@ def dereference_decoder(decoder: MutableMapping, *configs: MutableMapping) -> Mu
     return decoder
 
 
-def dereference_receiver(receiver: MutableMapping, *configs: MutableMapping, level: int = 0) -> MutableMapping:
+def dereference_receiver(
+    receiver: MutableMapping, *configs: MutableMapping, seen: set[str] | None = None
+) -> MutableMapping:
     # print(f'dereference receiver {receiver.get('name', 'anon')} = {receiver.get('receiver', 'n/a')}')
     try:
         key = receiver["receiver"]
     except KeyError:
         return receiver
-    if level > 3:  # really naive way to break cycles. But really, you shouldn't be doing this much nesting.
+    seen = seen or set()
+    if key in seen:  # break cycles
         return receiver
+    seen.add(key)
     templates = [config.get("receivers", {}).get(key, {}) for config in configs]
     sources = [receiver] + templates
     _decoder = util.DeepChainMap(*[s["decoder"] for s in sources if "decoder" in s])
     decoder = {"decoder": dereference_decoder(_decoder, *configs)}
 
     declared = {k: v for k, v in receiver.items() if k != "decoder"}
-    templated = [dereference_receiver(template, *configs, level=level + 1) for template in templates]
+    templated = [dereference_receiver(template, *configs, seen=seen) for template in templates]
 
     return util.DeepChainMap(decoder, declared, *templated)
 

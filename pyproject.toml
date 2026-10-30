@@ -1,3 +1,22 @@
+[project]
+name = "hfdlobserver"
+version = "0.1.0"
+description = "A multi-headed manager for dumphfdl and SDRs"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "backports-asyncio-runner ; python_full_version < '3.11'",
+    "chunkmuncher>=0.0.2 ; python_full_version >= '3.13'",
+    "click>=8.5.0",
+    "ka9q-python>=3.26.1",
+    "numpy>=2.5.4",
+    "pyyaml>=6.0.3",
+    "pyzmq>=27.2.0",
+    "requests>=2.34.2",
+    "rich>=15.0.0",
+    "whiptail-dialogs>=0.4.1",
+]
+
 [tool.ruff]
 exclude = [
     ".git",
@@ -23,16 +42,7 @@ select = [
     "ISC", # imlicit string concatenation
     "W",  # pycodestyle warnings
 ]
-ignore = [
-    "F841",  # Unused variables
-    "B904",  # Don't enforce how we format exception and raises
-    "B018", # Don't enforce unassigned variables (TODO: re-evaluate after adoption)
-    "B905", # Don't enforce strict zip usage (TODO: re-evaluate after adoption)
-    "E721", # Don't enforce is vs is not
-    "B024", # Don't enforce abstract class structure
-    "E402", # Don't enforce import positions
-]
-task-tags = ["$accrete:"]
+ignore = []
 
 [tool.ruff.format]
 quote-style = "double"

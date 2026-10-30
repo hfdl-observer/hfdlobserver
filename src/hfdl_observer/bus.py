@@ -46,9 +46,12 @@ class JSONWatcher(EventNotifier):
 
 
 class RoutineTask(EventNotifier):
-    loop = asyncio.get_event_loop()
     enabled = False
     task: Optional[asyncio.Task] = None
+
+    @functools.cached_property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return asyncio.get_event_loop()
 
     def start(self) -> None:
         self.enabled = True

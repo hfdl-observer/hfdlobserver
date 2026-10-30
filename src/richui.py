@@ -378,7 +378,7 @@ class RichLive(rich.live.Live):
             try:
                 super().refresh()
             except AssertionError as err:
-                logger.debug(f"ignoring {err}")
+                logger.debug(f"ignoring {err}", exc_info=err)
             for callback in self.post_refresh or []:
                 callback()
 
@@ -451,7 +451,7 @@ def launch(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         keyboard.add_mapping("r", lambda _: observer.maybe_describe_receivers(force=True))
         keyboard.add_mapping("R", lambda _: observer.maybe_describe_receivers(force=True))
 
-    with RichLive(
+    live = RichLive(
         display.root,
         refresh_per_second=SCREEN_REFRESH_RATE,
         console=console,
@@ -460,12 +460,13 @@ def launch(loghandler: Optional[logging.Handler], debug: bool = True, quiet: boo
         redirect_stderr=False,
         redirect_stdout=False,
         vertical_overflow="crop",
-    ) as live:
-        live.pre_refresh = [  # type: ignore[attr-defined]
+    )
+    with live:
+        live.pre_refresh = [
             # display.update_status,
             # display.update,
         ]
-        live.post_refresh = [  # type: ignore[attr-defined]
+        live.post_refresh = [
             display.on_render,
         ]
         hfdlobserver.observe(on_observer=observing)

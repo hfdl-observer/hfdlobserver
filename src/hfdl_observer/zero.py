@@ -25,7 +25,7 @@ def get_thread_context() -> Context:
     if not hasattr(util.thread_local, "zmq_context"):
         context = util.thread_local.zmq_context = Context.instance()
         context.setsockopt(zmq.LINGER, 0)
-    return util.thread_local.zmq_context  # type: ignore
+    return util.thread_local.zmq_context
 
 
 Message = util.Message
@@ -61,7 +61,7 @@ class ZeroBroker(AbstractZeroBroker):
         self.initialised.set()
 
     def run(self, *args: Any, **kwargs: Any) -> None:
-        context = zmq.Context()
+        context = zmq.Context()  # not async, since this is running as a multiprocess
         context.setsockopt(zmq.LINGER, 0)
 
         # Socket facing clients
@@ -132,7 +132,7 @@ class ZeroSubscriber:
     url: str
     channel: str
     context: Context
-    socket: Optional[zmq.Socket] = None
+    socket: Optional[zmq.asyncio.Socket] = None
 
     def __init__(self, url: str, channel: str, context: Optional[zmq.asyncio.Context] = None):
         self.context = get_thread_context()
@@ -161,11 +161,11 @@ class ZeroSubscriber:
                 payload = json.loads(body.decode())
                 target, subject = header.decode().split("|", 1)
                 try:
-                    sender = payload.get("sender", None)
+                    sender = payload.get("sender", 0)
                     payload = payload.get("payload", payload)
                 except AttributeError:
                     logger.info(f"no sender found in {payload!r}")
-                    sender = None
+                    sender = 0
                 message = Message(target=target, subject=subject, payload=payload, sender=sender)
                 self.receive(message)
         except asyncio.CancelledError:
@@ -193,7 +193,7 @@ class ZeroPublisher:
     host: str
     port: int
     channel: str
-    socket: Optional[zmq.Socket] = None
+    socket: Optional[zmq.asyncio.Socket] = None
 
     def __init__(self, host: str, port: int, context: Optional[zmq.asyncio.Context] = None):
         self.context = get_thread_context()

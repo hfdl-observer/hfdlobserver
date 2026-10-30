@@ -1,0 +1,52 @@
+dumphfdl:
+  default:
+    station_id: 'XX-YYYY-ZZZZ'
+    output:
+      # examples, if you have your own set, you can reuse them here.
+      - output: acars_router
+        address: acars-address
+        port: acars-port
+receivers:
+  ka9q-dynamic:
+    type: KA9QDynamicReceiver
+    client:
+      # This is the configured name in the radiod**conf file for the "status" or "control" node.
+      # It must be visible from the HFDLObserver instance.
+      # HFDLObserver will use this address to dynamically create the radiod channels it needs.
+      status_address: radio.local
+    decoder:
+      sample-rates: [24000, 48000, 64000, 96000, 128000, 160000, 192000, 256000, 320000, 384000]
+
+observer:
+  local_receivers:
+    # You have to define each possible dynamic receiver you want. With the above sample_rates, 13 is enough to cover
+    # all the HFDL frequencies (2026).
+    # HFDLObserver assumes that any receivers could access any frequencies. With a broad receiver like RX888 this is
+    # reasonable. If ka9q-radio is backed by a narrower receiver, there could be contention between widely spaced
+    # receiver requests. That case is not well-handled by HFDLObserver.
+    - name: ka9q-dynamic-01
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-02
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-03
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-04
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-05
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-06
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-07
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-08
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-09
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-10
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-11
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-12
+      receiver: ka9q-dynamic
+    - name: ka9q-dynamic-13
+      receiver: ka9q-dynamic

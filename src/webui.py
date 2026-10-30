@@ -178,8 +178,7 @@ class MainDisplayHTMLFormatter:
         classes.append("rowheader")
         thclass = f''' class="{" ".join(classes)}"''' if classes else ""
         spans = [
-            f"""<th{thclass}>"""
-            f"""<span class="value">{rowheader["value"]}</span>"""
+            f"""<th{thclass}><span class="value">{rowheader["value"]}</span>"""
         ]
         station = rowheader.get("station")
         if station:

@@ -56,6 +56,10 @@ class ObservingChannel:
         return (self.min_khz + self.max_khz) / 2.0
 
     @property
+    def center_hz(self) -> int:
+        return int(self.center_khz * 1000)
+
+    @property
     def width_hz(self) -> int:
         if self.frequencies:
             channel_width = hfdl.HFDL_CHANNEL_WIDTH

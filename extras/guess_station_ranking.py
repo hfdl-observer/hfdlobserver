@@ -244,7 +244,7 @@ def guess(lat: float, lon: float) -> list[tuple[int, int, str]]:
     distances: list = []
     for station in stations:
         result = (
-            round(distance(src, (float(station["lat"]), float(station["lon"]))), 1),  # type: ignore[arg-type]
+            round(distance(src, (float(station["lat"]), float(station["lon"]))), 1),  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
             station["id"],
             station["name"],
         )
